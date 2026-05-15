@@ -1,0 +1,391 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  CASHIER
+  WAITER
+  KITCHEN
+}
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TableStatus {
+  AVAILABLE
+  OPEN
+  BILLING
+  CLOSED
+}
+
+enum OrderStatus {
+  NEW
+  ACCEPTED
+  COOKING
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  PROMPTPAY
+  CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  VOID
+  REFUNDED
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum KitchenStation {
+  HOT
+  BAR
+  DESSERT
+  OTHER
+}
+
+model Restaurant {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  currency    String       @default("LAK")
+  taxRate       Float        @default(7)
+  serviceRate   Float        @default(0)
+  discountType  String       @default("amount")
+  discountValue Float        @default(0)
+  status      EntityStatus @default(ACTIVE)
+
+  branches    Branch[]
+  users       User[]
+  categories  Category[]
+  menuItems   MenuItem[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Branch {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String       @db.ObjectId
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+
+  name         String
+  phone        String?
+  address      String?
+  status       EntityStatus @default(ACTIVE)
+
+  users        User[]
+  tables       Table[]
+  categories   Category[]
+  menuItems    MenuItem[]
+  orders       Order[]
+  payments     Payment[]
+  shifts       Shift[]
+
+  auditLogs    AuditLog[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId])
+}
+
+model User {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String       @db.ObjectId
+  branchId     String?      @db.ObjectId
+
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+
+  name         String
+  username     String       @unique
+  pinHash      String
+  role         UserRole
+  status       EntityStatus @default(ACTIVE)
+
+  orders       Order[]
+  payments     Payment[]
+  shifts       Shift[]
+
+  auditLogs    AuditLog[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId])
+  @@index([branchId])
+  @@index([role])
+}
+
+model Table {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  branchId     String      @db.ObjectId
+  branch       Branch      @relation(fields: [branchId], references: [id])
+
+  name         String
+  qrCode       String      @unique
+  seats        Int         @default(4)
+  status       TableStatus @default(AVAILABLE)
+
+  orders       Order[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([branchId])
+  @@unique([branchId, name])
+}
+
+model Category {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String       @db.ObjectId
+  branchId     String?      @db.ObjectId
+
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+
+  name         String
+  sortOrder    Int          @default(0)
+  status       EntityStatus @default(ACTIVE)
+
+  menuItems    MenuItem[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId])
+  @@index([branchId])
+}
+
+model MenuItem {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId   String         @db.ObjectId
+  branchId       String?        @db.ObjectId
+  categoryId     String         @db.ObjectId
+
+  restaurant     Restaurant     @relation(fields: [restaurantId], references: [id])
+  branch         Branch?        @relation(fields: [branchId], references: [id])
+  category       Category       @relation(fields: [categoryId], references: [id])
+
+  name           String
+  description    String?
+  price          Int
+  imageUrl       String?
+  station        KitchenStation @default(HOT)
+  isRecommended  Boolean        @default(false)
+  isAvailable    Boolean        @default(true)
+  status         EntityStatus   @default(ACTIVE)
+  sortOrder      Int            @default(0)
+
+  orderItems     OrderItem[]
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([restaurantId])
+  @@index([branchId])
+  @@index([categoryId])
+  @@index([station])
+}
+
+model Order {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  branchId     String      @db.ObjectId
+  tableId      String      @db.ObjectId
+  waiterId     String?     @db.ObjectId
+
+  branch       Branch      @relation(fields: [branchId], references: [id])
+  table        Table       @relation(fields: [tableId], references: [id])
+  waiter       User?       @relation(fields: [waiterId], references: [id])
+
+  orderNumber  String
+  status       OrderStatus @default(NEW)
+  note         String?
+  cancelledAt  DateTime?
+  cancelledById String?    @db.ObjectId
+  cancelReason String?
+  subtotal     Int         @default(0)
+  total        Int         @default(0)
+
+  items        OrderItem[]
+  payments     Payment[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([branchId])
+  @@index([tableId])
+  @@index([status])
+  @@unique([branchId, orderNumber])
+}
+
+model OrderItem {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  orderId     String         @db.ObjectId
+  menuItemId  String?        @db.ObjectId
+
+  order       Order          @relation(fields: [orderId], references: [id])
+  menuItem    MenuItem?      @relation(fields: [menuItemId], references: [id])
+
+  name        String
+  price       Int
+  quantity    Int            @default(1)
+  note        String?
+  station     KitchenStation @default(HOT)
+  status      OrderStatus    @default(NEW)
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@index([station])
+  @@index([status])
+}
+
+model Payment {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  branchId       String        @db.ObjectId
+  orderId        String?       @db.ObjectId
+  cashierId      String?       @db.ObjectId
+  shiftId        String?       @db.ObjectId
+
+  branch         Branch        @relation(fields: [branchId], references: [id])
+  order          Order?        @relation(fields: [orderId], references: [id])
+  cashier        User?         @relation(fields: [cashierId], references: [id])
+  shift          Shift?        @relation(fields: [shiftId], references: [id])
+
+  billNumber     String
+  idempotencyKey String?
+  method         PaymentMethod
+  status         PaymentStatus @default(PAID)
+
+  subtotal       Int
+  discount       Int           @default(0)
+  serviceCharge  Int           @default(0)
+  vat            Int           @default(0)
+  total          Int
+  paidAmount     Int
+  changeAmount   Int           @default(0)
+
+  idempotencyRecords PaymentIdempotency[]
+
+  receiptHtml    String?
+  voidedAt       DateTime?
+  voidedById     String?       @db.ObjectId
+  voidReason     String?
+  refundedAt     DateTime?
+  refundedById   String?       @db.ObjectId
+  refundReason   String?
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([branchId])
+  @@index([orderId])
+  @@index([cashierId])
+  @@index([shiftId])
+  @@index([idempotencyKey])
+  @@unique([branchId, billNumber])
+}
+
+model PaymentIdempotency {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  key         String   @unique
+  branchId    String   @db.ObjectId
+  tableId     String?  @db.ObjectId
+  createdById String?  @db.ObjectId
+  paymentId   String?  @db.ObjectId
+
+  payment     Payment? @relation(fields: [paymentId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([paymentId])
+}
+
+model Shift {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  branchId     String      @db.ObjectId
+  cashierId    String      @db.ObjectId
+
+  branch       Branch      @relation(fields: [branchId], references: [id])
+  cashier      User        @relation(fields: [cashierId], references: [id])
+
+  status       ShiftStatus @default(OPEN)
+  openingCash  Int         @default(0)
+  closingCash  Int?
+  expectedCash Int?
+  difference   Int?
+
+  openedAt     DateTime    @default(now())
+  closedAt     DateTime?
+
+  payments     Payment[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([branchId])
+  @@index([cashierId])
+  @@index([status])
+}
+
+model SequenceCounter {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  scope     String
+  type      String
+  date      String
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, type, date])
+  @@index([scope])
+  @@index([type, date])
+}
+
+model AuditLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String? @db.ObjectId
+  branchId   String?  @db.ObjectId
+  userId     String?  @db.ObjectId
+  role       String?
+  action     String
+  targetType String
+  targetId   String?
+  reason     String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([restaurantId])
+  @@index([branchId])
+  @@index([userId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
