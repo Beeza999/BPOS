@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_URL || "https://bpos.onrender.com";
 
 export function getAuthToken() {
   const path = window.location.pathname;
