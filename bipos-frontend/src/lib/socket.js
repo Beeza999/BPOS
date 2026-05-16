@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import { getAuthToken } from './api.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const SOCKET_URL = import.meta.env.VITE_API_URL || "https://bpos.onrender.com";
 
 export const REALTIME_EVENT = 'bipos:realtime';
 export const SOCKET_AUTH_REFRESH_EVENT = 'bipos:socket-auth-refresh';
@@ -30,7 +30,7 @@ export function buildSocketAuth() {
   return token ? { token } : {};
 }
 
-export const socket = io(API_BASE, {
+export const socket = io(SOCKET_URL, {
   autoConnect: false,
   auth: buildSocketAuth(),
   reconnection: true,
