@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api.js";
+import { enableNotifySound, isNotifySoundEnabled, playNotifySound } from "../../lib/notifySound.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
-import {
-  enableNotifySound,
-  isNotifySoundEnabled,
-  playNotifySound,
-} from "../../lib/notifySound.js";
 import { sameLocalDay, ticketDate } from "./utils/date.js";
 import { stations, statuses, statusClass } from "./constants.js";
 import { Stat, Tabs } from "./components/KitchenComponents.jsx";
@@ -49,7 +45,6 @@ export default function Kitchen() {
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => isNotifySoundEnabled());
-  const soundEnabledRef = useRef(false);
   const notifiedOrderIdsRef = useRef(new Set());
 
   async function load() {
@@ -69,34 +64,15 @@ export default function Kitchen() {
     }
   }
 
-  function playBeep() {
-    playNotifySound();
-  }
-
-  function speak(text) {
-    if (!soundEnabledRef.current || !("speechSynthesis" in window) || !text) return;
-
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "lo-LA";
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Text-to-speech is optional.
-    }
-  }
-
   async function enableSound() {
     const ok = await enableNotifySound();
-    soundEnabledRef.current = ok;
     setSoundEnabled(ok);
 
     if (ok) {
-      speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+      setToast("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+      window.setTimeout(() => setToast(""), 2000);
     } else {
-      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາກົດປຸ່ມອີກຄັ້ງ");
+      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາເປີດສຽງເຄື່ອງ ແລ້ວກົດປຸ່ມອີກຄັ້ງ");
     }
   }
 
@@ -113,7 +89,6 @@ export default function Kitchen() {
 
     setToast(message);
     playNotifySound();
-    speak(`ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`);
     window.setTimeout(() => setToast(""), 5000);
   }
 
@@ -163,9 +138,6 @@ export default function Kitchen() {
     if (kitchenAuth.token) load();
   }, [kitchenAuth.token]);
 
-  useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
 
   useEffect(() => {
     if (!kitchenAuth.token) return undefined;

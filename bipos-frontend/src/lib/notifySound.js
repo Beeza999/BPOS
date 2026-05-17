@@ -1,150 +1,97 @@
-const SOUND_KEY = "bipos_notify_sound_enabled";
-const SOUND_VOLUME_KEY = "bipos_notify_sound_volume";
+const SOUND_KEY = "bipos_sound_enabled";
 
 let audio = null;
 let audioContext = null;
-
-function getVolume() {
-  const value = Number(localStorage.getItem(SOUND_VOLUME_KEY) || 1);
-  if (!Number.isFinite(value)) return 1;
-  return Math.min(1, Math.max(0, value));
-}
+let unlocked = false;
 
 function getAudio() {
   if (!audio) {
     audio = new Audio("/notify.mp3");
     audio.preload = "auto";
-    audio.volume = getVolume();
-    audio.playsInline = true;
+    audio.volume = 1;
   }
 
   return audio;
 }
 
-async function unlockHtmlAudio() {
-  const sound = getAudio();
-  sound.volume = getVolume();
-  sound.currentTime = 0;
+function getAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 
-  await sound.play();
-  sound.pause();
-  sound.currentTime = 0;
+  if (!AudioContextClass) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+
+  return audioContext;
 }
 
-async function unlockBeepAudio() {
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return;
+async function playBeep() {
+  const ctx = getAudioContext();
 
-  if (!audioContext || audioContext.state === "closed") {
-    audioContext = new AudioContext();
+  if (!ctx) return false;
+
+  if (ctx.state === "suspended") {
+    await ctx.resume();
   }
 
-  if (audioContext.state === "suspended") {
-    await audioContext.resume();
-  }
-
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
+  const oscillator = ctx.createOscillator();
+  const gain = ctx.createGain();
 
   oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-  gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
+  oscillator.frequency.value = 880;
+  gain.gain.value = 0.35;
 
   oscillator.connect(gain);
-  gain.connect(audioContext.destination);
+  gain.connect(ctx.destination);
+
   oscillator.start();
-  oscillator.stop(audioContext.currentTime + 0.15);
+  oscillator.stop(ctx.currentTime + 0.25);
+
+  return true;
 }
 
 export async function enableNotifySound() {
   try {
-    // ต้องถูกเรียกจากการกดปุ่มของผู้ใช้เท่านั้น มือถือถึงจะปลดล็อกเสียง
-    await unlockBeepAudio();
+    const sound = getAudio();
 
-    // ถ้ามีไฟล์ public/notify.mp3 จะปลดล็อกไฟล์เสียงด้วย
-    try {
-      await unlockHtmlAudio();
-    } catch {
-      // ถ้าไม่มีไฟล์ notify.mp3 ยังใช้เสียง beep จาก AudioContext ได้
-    }
+    await playBeep();
 
+    sound.currentTime = 0;
+    await sound.play();
+    sound.pause();
+    sound.currentTime = 0;
+
+    unlocked = true;
     localStorage.setItem(SOUND_KEY, "1");
     return true;
-  } catch (error) {
-    console.warn("Enable notify sound failed:", error);
-    localStorage.removeItem(SOUND_KEY);
-    return false;
-  }
-}
+  } catch {
+    try {
+      await playBeep();
 
-export function disableNotifySound() {
-  localStorage.removeItem(SOUND_KEY);
+      unlocked = true;
+      localStorage.setItem(SOUND_KEY, "1");
+      return true;
+    } catch {
+      unlocked = false;
+      localStorage.removeItem(SOUND_KEY);
+      return false;
+    }
+  }
 }
 
 export function isNotifySoundEnabled() {
-  return localStorage.getItem(SOUND_KEY) === "1";
-}
-
-export function setNotifySoundVolume(volume) {
-  const nextVolume = Math.min(1, Math.max(0, Number(volume || 0)));
-  localStorage.setItem(SOUND_VOLUME_KEY, String(nextVolume));
-  if (audio) audio.volume = nextVolume;
+  return unlocked || localStorage.getItem(SOUND_KEY) === "1";
 }
 
 export async function playNotifySound() {
-  if (!isNotifySoundEnabled()) return false;
-
-  let played = false;
+  if (!isNotifySoundEnabled()) return;
 
   try {
     const sound = getAudio();
-    sound.volume = getVolume();
     sound.currentTime = 0;
     await sound.play();
-    played = true;
   } catch {
-    // ถ้าไฟล์ mp3 เล่นไม่ได้ จะ fallback เป็น beep
+    await playBeep();
   }
-
-  if (!played) {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return false;
-
-      if (!audioContext || audioContext.state === "closed") {
-        audioContext = new AudioContext();
-      }
-
-      if (audioContext.state === "suspended") {
-        await audioContext.resume();
-      }
-
-      const now = audioContext.currentTime;
-
-      for (let index = 0; index < 2; index += 1) {
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        const start = now + index * 0.28;
-
-        oscillator.type = "square";
-        oscillator.frequency.setValueAtTime(index === 0 ? 880 : 1040, start);
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.22 * getVolume(), start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
-
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-        oscillator.start(start);
-        oscillator.stop(start + 0.24);
-      }
-
-      played = true;
-    } catch (error) {
-      console.warn("Notify sound blocked:", error);
-    }
-  }
-
-  return played;
 }

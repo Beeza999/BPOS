@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api, money } from "../../lib/api.js";
+import { enableNotifySound, isNotifySoundEnabled, playNotifySound } from "../../lib/notifySound.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
-import {
-  enableNotifySound,
-  isNotifySoundEnabled,
-  playNotifySound,
-} from "../../lib/notifySound.js";
 import { StatCard } from "./components/CashierComponents.jsx";
 import LoginCard from "./components/LoginCard.jsx";
 import Header from "./components/Header.jsx";
@@ -266,7 +262,6 @@ export default function Cashier() {
   const [loading, setLoading] = useState(true);
   const [cashierAlerts, setCashierAlerts] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(() => isNotifySoundEnabled());
-  const soundEnabledRef = useRef(false);
   const paymentSubmittingRef = useRef(false);
   const tablesRef = useRef([]);
   const alertTimersRef = useRef({});
@@ -321,33 +316,18 @@ export default function Cashier() {
     }
   }
 
-  function playBeep() {
-    playNotifySound();
-  }
-
-  function speak(text) {
-    if (!soundEnabledRef.current || !("speechSynthesis" in window) || !text) return;
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "lo-LA";
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Text-to-speech is optional.
-    }
-  }
-
   async function enableSound() {
     const ok = await enableNotifySound();
-    soundEnabledRef.current = ok;
     setSoundEnabled(ok);
 
     if (ok) {
-      speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+      addCashierAlert({
+        type: "sound",
+        title: "ເປີດສຽງແລ້ວ",
+        message: "ສຽງແຈ້ງເຕືອນພ້ອມໃຊ້ງານແລ້ວ",
+      });
     } else {
-      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາກົດປຸ່ມອີກຄັ້ງ");
+      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາເປີດສຽງເຄື່ອງ ແລ້ວກົດປຸ່ມອີກຄັ້ງ");
     }
   }
 
@@ -364,7 +344,6 @@ export default function Cashier() {
     window.clearTimeout(alertTimersRef.current[id]);
     alertTimersRef.current[id] = window.setTimeout(() => removeCashierAlert(id), CASHIER_ALERT_TTL_MS);
     playNotifySound();
-    speak(alert.speech || alert.title || alert.message);
   }
 
   function tableNameFromPayload(payload) {
@@ -379,9 +358,6 @@ export default function Cashier() {
     if (cashierAuth.token) load();
   }, [cashierAuth.token]);
 
-  useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
 
   useEffect(() => {
     tablesRef.current = tables;
