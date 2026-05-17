@@ -343,7 +343,7 @@ export default function Cashier() {
     setCashierAlerts((old) => [nextAlert, ...old.filter((item) => item.id !== id)].slice(0, 8));
     window.clearTimeout(alertTimersRef.current[id]);
     alertTimersRef.current[id] = window.setTimeout(() => removeCashierAlert(id), CASHIER_ALERT_TTL_MS);
-    playNotifySound();
+    playNotifySound(alert.speech || alert.message || alert.title || "");
   }
 
   function tableNameFromPayload(payload) {
@@ -397,7 +397,7 @@ export default function Cashier() {
           type: "ready",
           title: `ພ້ອມເສີບ · ໂຕະ ${tableName}`,
           message: `${itemName} x${quantity} ສຳເລັດແລ້ວ`,
-          speech: `ພ້ອມເສີບ ໂຕະ ${tableName} ${itemName} ${quantity}`,
+          speech: `ໂຕະ ${tableName} ພ້ອມເສີບ ${itemName} ${quantity}`,
         });
       }
     }

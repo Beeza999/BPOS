@@ -83,12 +83,15 @@ export default function Kitchen() {
     const tableName = order.table?.name || "-";
     const items = Array.isArray(order.items) ? order.items : [];
     const itemText = items.length
-      ? items.map((item) => `${item.name} x${item.quantity || 1}`).join(", ")
+      ? items.map((item) => `${item.name} ${item.quantity || 1}`).join(", ")
       : "ມີອໍເດີໃໝ່";
     const message = `ອໍເດີໃໝ່ ໂຕະ ${tableName} · ${itemText}`;
+    const speech = items.length
+      ? `ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`
+      : `ອໍເດີໃໝ່ ໂຕະ ${tableName}`;
 
     setToast(message);
-    playNotifySound();
+    playNotifySound(speech);
     window.setTimeout(() => setToast(""), 5000);
   }
 
