@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api, money } from "../../lib/api.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
+import {
+  enableNotifySound,
+  isNotifySoundEnabled,
+  playNotifySound,
+} from "../../lib/notifySound.js";
 import { StatCard } from "./components/CashierComponents.jsx";
 import LoginCard from "./components/LoginCard.jsx";
 import Header from "./components/Header.jsx";
@@ -260,7 +265,7 @@ export default function Cashier() {
   const [closingCash, setClosingCash] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cashierAlerts, setCashierAlerts] = useState([]);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => isNotifySoundEnabled());
   const soundEnabledRef = useRef(false);
   const paymentSubmittingRef = useRef(false);
   const tablesRef = useRef([]);
@@ -317,26 +322,7 @@ export default function Cashier() {
   }
 
   function playBeep() {
-    if (!soundEnabledRef.current) return;
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-      oscillator.type = "square";
-      oscillator.frequency.setValueAtTime(740, ctx.currentTime);
-      gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-      oscillator.start();
-      oscillator.stop(ctx.currentTime + 0.4);
-      window.setTimeout(() => ctx.close().catch(() => null), 650);
-    } catch {
-      // Browser may block sound before the user presses enable.
-    }
+    playNotifySound();
   }
 
   function speak(text) {
@@ -353,11 +339,16 @@ export default function Cashier() {
     }
   }
 
-  function enableSound() {
-    soundEnabledRef.current = true;
-    setSoundEnabled(true);
-    playBeep();
-    speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+  async function enableSound() {
+    const ok = await enableNotifySound();
+    soundEnabledRef.current = ok;
+    setSoundEnabled(ok);
+
+    if (ok) {
+      speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+    } else {
+      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາກົດປຸ່ມອີກຄັ້ງ");
+    }
   }
 
   function removeCashierAlert(id) {
@@ -372,7 +363,7 @@ export default function Cashier() {
     setCashierAlerts((old) => [nextAlert, ...old.filter((item) => item.id !== id)].slice(0, 8));
     window.clearTimeout(alertTimersRef.current[id]);
     alertTimersRef.current[id] = window.setTimeout(() => removeCashierAlert(id), CASHIER_ALERT_TTL_MS);
-    playBeep();
+    playNotifySound();
     speak(alert.speech || alert.title || alert.message);
   }
 

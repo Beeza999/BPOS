@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
+import {
+  enableNotifySound,
+  isNotifySoundEnabled,
+  playNotifySound,
+} from "../../lib/notifySound.js";
 import { sameLocalDay, ticketDate } from "./utils/date.js";
 import { stations, statuses, statusClass } from "./constants.js";
 import { Stat, Tabs } from "./components/KitchenComponents.jsx";
@@ -43,7 +48,7 @@ export default function Kitchen() {
   const [status, setStatus] = useState("all");
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => isNotifySoundEnabled());
   const soundEnabledRef = useRef(false);
   const notifiedOrderIdsRef = useRef(new Set());
 
@@ -65,30 +70,7 @@ export default function Kitchen() {
   }
 
   function playBeep() {
-    if (!soundEnabledRef.current) return;
-
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-
-      const ctx = new AudioContext();
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
-      gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-      oscillator.start();
-      oscillator.stop(ctx.currentTime + 0.5);
-      window.setTimeout(() => ctx.close().catch(() => null), 700);
-    } catch {
-      // Browser may block sound before the user presses enable.
-    }
+    playNotifySound();
   }
 
   function speak(text) {
@@ -106,11 +88,16 @@ export default function Kitchen() {
     }
   }
 
-  function enableSound() {
-    soundEnabledRef.current = true;
-    setSoundEnabled(true);
-    playBeep();
-    speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+  async function enableSound() {
+    const ok = await enableNotifySound();
+    soundEnabledRef.current = ok;
+    setSoundEnabled(ok);
+
+    if (ok) {
+      speak("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+    } else {
+      alert("Browser ບໍ່ອະນຸຍາດສຽງ ກະລຸນາກົດປຸ່ມອີກຄັ້ງ");
+    }
   }
 
   function notifyNewOrder(order) {
@@ -125,7 +112,7 @@ export default function Kitchen() {
     const message = `ອໍເດີໃໝ່ ໂຕະ ${tableName} · ${itemText}`;
 
     setToast(message);
-    playBeep();
+    playNotifySound();
     speak(`ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`);
     window.setTimeout(() => setToast(""), 5000);
   }
