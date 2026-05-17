@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api, money } from "../../lib/api.js";
-import { enableNotifySound, isNotifySoundEnabled, playNotifySound } from "../../lib/notifySound.js";
+import {
+  enableNotifySound,
+  isNotifySoundEnabled,
+  speakNotify,
+  readyServeVoiceText,
+  staffCallVoiceText,
+} from "../../lib/notifySound.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
 import { StatCard } from "./components/CashierComponents.jsx";
@@ -337,15 +343,23 @@ export default function Cashier() {
     setCashierAlerts((old) => old.filter((alert) => alert.id !== id));
   }
 
-  function addCashierAlert(alert) {
-    const id = alert.id || `${alert.type}-${Date.now()}-${Math.random()}`;
-    const nextAlert = { ...alert, id, createdAt: Date.now() };
-    setCashierAlerts((old) => [nextAlert, ...old.filter((item) => item.id !== id)].slice(0, 8));
-    window.clearTimeout(alertTimersRef.current[id]);
-    alertTimersRef.current[id] = window.setTimeout(() => removeCashierAlert(id), CASHIER_ALERT_TTL_MS);
-    playNotifySound(alert.speech || alert.message || alert.title || "");
-  }
+ function addCashierAlert(alert) {
+  const id = alert.id || `${alert.type}-${Date.now()}-${Math.random()}`;
+  const speechText = alert.speech || alert.message || alert.title || "";
+  const nextAlert = { ...alert, id, speech: speechText, createdAt: Date.now() };
 
+  setCashierAlerts((old) =>
+    [nextAlert, ...old.filter((item) => item.id !== id)].slice(0, 8)
+  );
+
+  window.clearTimeout(alertTimersRef.current[id]);
+  alertTimersRef.current[id] = window.setTimeout(
+    () => removeCashierAlert(id),
+    CASHIER_ALERT_TTL_MS
+  );
+
+  speakNotify(speechText);
+}
   function tableNameFromPayload(payload) {
     if (payload?.tableName) return payload.tableName;
     if (payload?.order?.table?.name) return payload.order.table.name;
@@ -374,33 +388,45 @@ export default function Cashier() {
     if (!cashierAuth.token) return undefined;
 
     function handleRealtime(event) {
-      const eventName = event.detail?.event;
-      const payload = event.detail?.payload || {};
+  const eventName = event.detail?.event;
+  const payload = event.detail?.payload || {};
 
-      if (eventName === "staff:call") {
-        const tableName = tableNameFromPayload(payload);
-        addCashierAlert({
-          id: `staff-${payload.tableId || "table"}-${payload.calledAt || Date.now()}`,
-          type: "staff",
-          title: `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
-          message: payload.message || "ລູກຄ້າຕ້ອງການພະນັກງານ",
-          speech: `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
-        });
-      }
+  if (eventName === "staff:call") {
+    const speech = staffCallVoiceText(payload);
+    const tableName = tableNameFromPayload(payload);
 
-      if (eventName === "kitchen:ticket-status" && payload.status === "READY") {
-        const tableName = tableNameFromPayload(payload);
-        const itemName = payload.name || "ອາຫານ";
-        const quantity = payload.quantity || 1;
-        addCashierAlert({
-          id: `ready-${payload.id || Date.now()}-${payload.updatedAt || Date.now()}`,
-          type: "ready",
-          title: `ພ້ອມເສີບ · ໂຕະ ${tableName}`,
-          message: `${itemName} x${quantity} ສຳເລັດແລ້ວ`,
-          speech: `ໂຕະ ${tableName} ພ້ອມເສີບ ${itemName} ${quantity}`,
-        });
-      }
-    }
+    addCashierAlert({
+      id: `staff-${payload.tableId || payload.tableToken || "table"}-${payload.calledAt || Date.now()}`,
+      type: "staff",
+      title: `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
+      message: payload.message || "ລູກຄ້າຕ້ອງການພະນັກງານ",
+      speech,
+    });
+  }
+
+  if (
+    eventName === "kitchen:ticket-status" &&
+    ["READY", "READY_TO_SERVE"].includes(String(payload.status || "").toUpperCase())
+  ) {
+    const speech = readyServeVoiceText(payload);
+    const tableName = tableNameFromPayload(payload);
+    const itemName =
+      payload.name ||
+      payload.menuName ||
+      payload.menuItem?.name ||
+      payload.item?.name ||
+      "ອາຫານ";
+    const quantity = payload.quantity || payload.qty || 1;
+
+    addCashierAlert({
+      id: `ready-${payload.id || Date.now()}-${payload.updatedAt || Date.now()}`,
+      type: "ready",
+      title: `ພ້ອມເສີບ · ໂຕະ ${tableName}`,
+      message: `${itemName} x${quantity} ສຳເລັດແລ້ວ`,
+      speech,
+    });
+  }
+}
 
     window.addEventListener(REALTIME_EVENT, handleRealtime);
     return () => window.removeEventListener(REALTIME_EVENT, handleRealtime);

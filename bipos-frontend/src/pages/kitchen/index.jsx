@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api.js";
-import { enableNotifySound, isNotifySoundEnabled, playNotifySound } from "../../lib/notifySound.js";
+import {
+  enableNotifySound,
+  isNotifySoundEnabled,
+  speakNotify,
+  orderVoiceText,
+} from "../../lib/notifySound.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
 import { sameLocalDay, ticketDate } from "./utils/date.js";
@@ -77,23 +82,22 @@ export default function Kitchen() {
   }
 
   function notifyNewOrder(order) {
-    if (!order?.id || notifiedOrderIdsRef.current.has(order.id)) return;
-    notifiedOrderIdsRef.current.add(order.id);
+  const orderId =
+    order?.id ||
+    order?.orderId ||
+    order?.order?.id ||
+    `${Date.now()}-${Math.random()}`;
 
-    const tableName = order.table?.name || "-";
-    const items = Array.isArray(order.items) ? order.items : [];
-    const itemText = items.length
-      ? items.map((item) => `${item.name} ${item.quantity || 1}`).join(", ")
-      : "ມີອໍເດີໃໝ່";
-    const message = `ອໍເດີໃໝ່ ໂຕະ ${tableName} · ${itemText}`;
-    const speech = items.length
-      ? `ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`
-      : `ອໍເດີໃໝ່ ໂຕະ ${tableName}`;
+  if (notifiedOrderIdsRef.current.has(orderId)) return;
+  notifiedOrderIdsRef.current.add(orderId);
 
-    setToast(message);
-    playNotifySound(speech);
-    window.setTimeout(() => setToast(""), 5000);
-  }
+  const speech = orderVoiceText(order);
+
+  setToast(speech);
+  speakNotify(speech);
+
+  window.setTimeout(() => setToast(""), 5000);
+}
 
   async function loginKitchen(e) {
     e.preventDefault();
@@ -145,11 +149,14 @@ export default function Kitchen() {
   useEffect(() => {
     if (!kitchenAuth.token) return undefined;
 
-    function handleRealtime(event) {
-      const eventName = event.detail?.event;
-      const payload = event.detail?.payload;
-      if (eventName === "order:new") notifyNewOrder(payload);
-    }
+   function handleRealtime(event) {
+  const eventName = event.detail?.event;
+  const payload = event.detail?.payload;
+
+  if (eventName === "order:new" || eventName === "order:created") {
+    notifyNewOrder(payload);
+  }
+}
 
     window.addEventListener(REALTIME_EVENT, handleRealtime);
     return () => window.removeEventListener(REALTIME_EVENT, handleRealtime);
