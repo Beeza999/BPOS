@@ -343,7 +343,7 @@ export default function Cashier() {
     setCashierAlerts((old) => old.filter((alert) => alert.id !== id));
   }
 
- function addCashierAlert(alert) {
+function addCashierAlert(alert) {
   const id = alert.id || `${alert.type}-${Date.now()}-${Math.random()}`;
   const speechText = alert.speech || alert.message || alert.title || "";
   const nextAlert = { ...alert, id, speech: speechText, createdAt: Date.now() };
@@ -399,7 +399,7 @@ export default function Cashier() {
       id: `staff-${payload.tableId || payload.tableToken || "table"}-${payload.calledAt || Date.now()}`,
       type: "staff",
       title: `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
-      message: payload.message || "ລູກຄ້າຕ້ອງການພະນັກງານ",
+      message: "ລູກຄ້າຕ້ອງການພະນັກງານ",
       speech,
     });
   }
@@ -410,12 +410,14 @@ export default function Cashier() {
   ) {
     const speech = readyServeVoiceText(payload);
     const tableName = tableNameFromPayload(payload);
+
     const itemName =
       payload.name ||
       payload.menuName ||
       payload.menuItem?.name ||
       payload.item?.name ||
       "ອາຫານ";
+
     const quantity = payload.quantity || payload.qty || 1;
 
     addCashierAlert({

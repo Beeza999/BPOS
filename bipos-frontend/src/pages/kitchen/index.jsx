@@ -81,7 +81,7 @@ export default function Kitchen() {
     }
   }
 
-  function notifyNewOrder(order) {
+function notifyNewOrder(order) {
   const orderId =
     order?.id ||
     order?.orderId ||

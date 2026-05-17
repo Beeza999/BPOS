@@ -1,129 +1,95 @@
-const SOUND_KEY = "bipos_sound_enabled";
+const SOUND_KEY = "bipos_voice_enabled";
 
-let audio = null;
-let audioContext = null;
 let unlocked = false;
 
-function getAudio() {
-  if (!audio) {
-    audio = new Audio("/notify.mp3");
-    audio.preload = "auto";
-    audio.volume = 1;
-  }
-
-  return audio;
+function getVoices() {
+  if (!window.speechSynthesis) return [];
+  return window.speechSynthesis.getVoices() || [];
 }
 
-function getAudioContext() {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return null;
+function waitForVoices() {
+  return new Promise((resolve) => {
+    const voices = getVoices();
 
-  if (!audioContext) {
-    audioContext = new AudioContextClass();
-  }
+    if (voices.length > 0) {
+      resolve(voices);
+      return;
+    }
 
-  return audioContext;
+    let done = false;
+
+    function finish() {
+      if (done) return;
+      done = true;
+      resolve(getVoices());
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = finish;
+    }
+
+    setTimeout(finish, 800);
+  });
 }
 
-async function playBeep() {
-  const ctx = getAudioContext();
-  if (!ctx) return false;
-
-  if (ctx.state === "suspended") {
-    await ctx.resume();
-  }
-
-  const oscillator = ctx.createOscillator();
-  const gain = ctx.createGain();
-
-  oscillator.type = "sine";
-  oscillator.frequency.value = 880;
-  gain.gain.value = 0.25;
-
-  oscillator.connect(gain);
-  gain.connect(ctx.destination);
-
-  oscillator.start();
-  oscillator.stop(ctx.currentTime + 0.2);
-
-  return true;
-}
-
-function getBestVoice() {
-  const voices = window.speechSynthesis?.getVoices?.() || [];
+async function getBestVoice() {
+  const voices = await waitForVoices();
 
   return (
-    voices.find((v) => v.lang?.toLowerCase().startsWith("lo")) ||
-    voices.find((v) => v.lang?.toLowerCase().startsWith("th")) ||
-    voices.find((v) => v.lang?.toLowerCase().startsWith("en")) ||
+    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("lo")) ||
+    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("th")) ||
+    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("en")) ||
     voices[0] ||
     null
   );
 }
 
-function speakText(text) {
+async function speakText(text) {
+  if (!text || !window.speechSynthesis) {
+    throw new Error("Speech synthesis not supported");
+  }
+
+  const voice = await getBestVoice();
+
   return new Promise((resolve, reject) => {
-    if (!text || !window.speechSynthesis) {
-      reject(new Error("Speech synthesis not supported"));
-      return;
+    try {
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(String(text));
+
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || "lo-LA";
+      } else {
+        utterance.lang = "lo-LA";
+      }
+
+      utterance.rate = 0.88;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      utterance.onend = () => resolve(true);
+      utterance.onerror = () => reject(new Error("Speak failed"));
+
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      reject(error);
     }
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = getBestVoice();
-
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || "lo-LA";
-    } else {
-      utterance.lang = "lo-LA";
-    }
-
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    utterance.onend = resolve;
-    utterance.onerror = reject;
-
-    window.speechSynthesis.speak(utterance);
   });
 }
 
 export async function enableNotifySound() {
   try {
-    const sound = getAudio();
-
-    await playBeep();
-
-    sound.currentTime = 0;
-    await sound.play();
-    sound.pause();
-    sound.currentTime = 0;
-
-    // ปลดล็อก speech synthesis ด้วยการพูดสั้น ๆ หลังจากผู้ใช้กดปุ่ม
-    try {
-      await speakText("ເປີດສຽງແລ້ວ");
-    } catch {
-      // ไม่ต้องทำอะไร ถ้าเครื่องไม่รองรับเสียงพูด
-    }
+    await speakText("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
 
     unlocked = true;
     localStorage.setItem(SOUND_KEY, "1");
-    return true;
-  } catch {
-    try {
-      await playBeep();
 
-      unlocked = true;
-      localStorage.setItem(SOUND_KEY, "1");
-      return true;
-    } catch {
-      unlocked = false;
-      localStorage.removeItem(SOUND_KEY);
-      return false;
-    }
+    return true;
+  } catch (error) {
+    unlocked = false;
+    localStorage.removeItem(SOUND_KEY);
+    return false;
   }
 }
 
@@ -131,105 +97,90 @@ export function isNotifySoundEnabled() {
   return unlocked || localStorage.getItem(SOUND_KEY) === "1";
 }
 
-export async function playNotifySound() {
-  if (!isNotifySoundEnabled()) return;
+export async function speakNotify(text) {
+  if (!isNotifySoundEnabled()) return false;
 
   try {
-    const sound = getAudio();
-    sound.currentTime = 0;
-    await sound.play();
-  } catch {
-    try {
-      await playBeep();
-    } catch {
-      // ignore
-    }
+    await speakText(text);
+    return true;
+  } catch (error) {
+    console.warn("Voice notification failed:", error);
+    return false;
   }
 }
 
-export async function speakNotify(text) {
-  if (!isNotifySoundEnabled()) return;
+function getTableName(payload) {
+  return (
+    payload?.table?.name ||
+    payload?.tableName ||
+    payload?.table ||
+    payload?.tableToken ||
+    payload?.order?.table?.name ||
+    payload?.bill?.table?.name ||
+    payload?.ticket?.order?.table?.name ||
+    "-"
+  );
+}
 
-  try {
-    // ให้มีเสียงติ๊งก่อน แล้วค่อยพูดข้อความจริง
-    await playNotifySound();
+function getItems(payload) {
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.orderItems)) return payload.orderItems;
+  if (Array.isArray(payload?.order?.items)) return payload.order.items;
+  if (Array.isArray(payload?.ticket?.items)) return payload.ticket.items;
 
-    setTimeout(() => {
-      speakText(text).catch(() => {});
-    }, 350);
-  } catch {
-    try {
-      await speakText(text);
-    } catch {
-      // ถ้าเครื่องไม่รองรับเสียงพูด จะเหลือแค่ notify.mp3
-    }
+  if (payload?.name || payload?.menuName || payload?.menuItem?.name || payload?.item?.name) {
+    return [payload];
   }
+
+  return [];
+}
+
+function getItemName(item) {
+  return (
+    item?.menuItem?.name ||
+    item?.menu?.name ||
+    item?.item?.name ||
+    item?.name ||
+    item?.menuName ||
+    "ເມນູ"
+  );
+}
+
+function getItemQty(item) {
+  return item?.quantity || item?.qty || 1;
+}
+
+function itemsVoiceText(items) {
+  return items
+    .map((item) => `${getItemName(item)} ${getItemQty(item)}`)
+    .join(", ");
 }
 
 export function orderVoiceText(order) {
-  const tableName =
-    order?.table?.name ||
-    order?.tableName ||
-    order?.table ||
-    order?.bill?.table?.name ||
-    "";
+  const tableName = getTableName(order);
+  const items = getItems(order);
+  const itemText = itemsVoiceText(items);
 
-  const items = order?.items || order?.orderItems || [];
-
-  const itemText = items
-    .map((item) => {
-      const name =
-        item?.menuItem?.name ||
-        item?.menu?.name ||
-        item?.name ||
-        item?.menuName ||
-        "ເມນູ";
-
-      const qty = item?.quantity || item?.qty || 1;
-
-      return `${name} ${qty}`;
-    })
-    .join(", ");
+  if (!itemText) {
+    return `ອໍເດີໃໝ່ ໂຕະ ${tableName}`;
+  }
 
   return `ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`;
 }
 
 export function readyServeVoiceText(payload) {
-  const tableName =
-    payload?.table?.name ||
-    payload?.tableName ||
-    payload?.table ||
-    payload?.order?.table?.name ||
-    payload?.bill?.table?.name ||
-    "";
+  const tableName = getTableName(payload);
+  const items = getItems(payload);
+  const itemText = itemsVoiceText(items);
 
-  const items = payload?.items || payload?.orderItems || payload?.order?.items || [];
-
-  const itemText = items
-    .map((item) => {
-      const name =
-        item?.menuItem?.name ||
-        item?.menu?.name ||
-        item?.name ||
-        item?.menuName ||
-        "ເມນູ";
-
-      const qty = item?.quantity || item?.qty || 1;
-
-      return `${name} ${qty}`;
-    })
-    .join(", ");
+  if (!itemText) {
+    return `ໂຕະ ${tableName} ພ້ອມເສີບ`;
+  }
 
   return `ໂຕະ ${tableName} ພ້ອມເສີບ ${itemText}`;
 }
 
 export function staffCallVoiceText(payload) {
-  const tableName =
-    payload?.table?.name ||
-    payload?.tableName ||
-    payload?.table ||
-    payload?.tableToken ||
-    "";
-
+  const tableName = getTableName(payload);
   return `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`;
 }
