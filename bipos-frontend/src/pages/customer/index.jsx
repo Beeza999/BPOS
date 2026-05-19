@@ -1,30 +1,143 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, money } from '../../lib/api.js';
-import { Tab, Empty } from './components/CustomerComponents.jsx';
 import { joinTableRoom } from '../../lib/socket.js';
 import { useRealtimeReload } from '../../hooks/useRealtimeReload.js';
 
 const statusText = {
-  NEW: 'ສັ່ງແລ້ວ',
+  NEW: 'ລໍຖ້າຢືນຢັນ',
   ACCEPTED: 'ຮັບອໍເດີແລ້ວ',
   COOKING: 'ກຳລັງເຮັດ',
-  READY: 'ພ້ອມແລ້ວ',
+  READY: 'ພ້ອມເສີບ',
   SERVED: 'ເສີບແລ້ວ',
   CANCELLED: 'ຍົກເລີກ',
 };
 
-function getStatusClass(status) {
-  if (status === 'READY') return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100';
-  if (status === 'COOKING' || status === 'ACCEPTED') return 'bg-orange-50 text-orange-700 ring-1 ring-orange-100';
-  if (status === 'CANCELLED') return 'bg-red-50 text-red-700 ring-1 ring-red-100';
-  if (status === 'SERVED') return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
-  return 'bg-blue-50 text-blue-700 ring-1 ring-blue-100';
+function shortMoney(value) {
+  return money(value);
 }
 
-function itemImage(menu) {
-  if (menu?.imageUrl) return menu.imageUrl;
-  if (menu?.image) return menu.image;
-  return '';
+function getOrderTime(order) {
+  const raw = order?.createdAt || order?.updatedAt || new Date().toISOString();
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit' });
+}
+
+function IconButton({ children, onClick, active = false, className = '' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl shadow-sm transition active:scale-95 ${
+        active ? 'bg-orange-500 text-white' : 'bg-white text-orange-500'
+      } ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CategoryButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-[56px] min-w-[126px] shrink-0 rounded-xl px-5 py-3 text-center text-base font-semibold shadow-sm transition active:scale-95 sm:min-w-[145px] ${
+        active ? 'bg-orange-600 text-white' : 'bg-white text-slate-900'
+      }`}
+    >
+      <span className="line-clamp-1">{children}</span>
+    </button>
+  );
+}
+
+function MenuCard({ menu, onAdd, compact = false }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-100 ${
+        compact ? 'flex items-center gap-3 p-3' : 'min-h-[175px] p-4'
+      }`}
+    >
+      <div
+        className={`shrink-0 overflow-hidden rounded-2xl bg-slate-100 ${
+          compact ? 'h-24 w-24' : 'mb-3 h-20 w-20'
+        }`}
+      >
+        {menu.imageUrl ? (
+          <img alt={menu.name} className="h-full w-full object-cover" src={menu.imageUrl} />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-4xl">🍽️</div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <h4 className="line-clamp-2 text-lg font-extrabold leading-tight text-slate-800">{menu.name}</h4>
+        {compact && <p className="mt-1 line-clamp-1 text-sm text-slate-400">ລາຄາຍັງບໍ່ລວມ VAT</p>}
+        {!compact && menu.description && <p className="mt-1 line-clamp-1 text-sm text-slate-400">{menu.description}</p>}
+        <p className="mt-3 text-lg font-extrabold text-orange-600">{shortMoney(menu.price)}</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onAdd(menu)}
+        className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-orange-600 text-2xl font-black leading-none text-white shadow-lg transition active:scale-90"
+        aria-label="add menu"
+      >
+        +
+      </button>
+    </article>
+  );
+}
+
+function EmptyBox({ children }) {
+  return <div className="rounded-3xl bg-white/80 p-8 text-center font-semibold text-slate-400 shadow-sm">{children}</div>;
+}
+
+function CartPanel({ cart, cartQty, cartTotal, changeQty, note, submit, closeCart }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-3xl rounded-t-[32px] bg-white p-4 shadow-2xl ring-1 ring-slate-100 pb-[calc(16px+env(safe-area-inset-bottom))] lg:right-6 lg:left-auto lg:bottom-6 lg:w-[390px] lg:rounded-[32px]">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-extrabold text-slate-900">ກະຕ່າອາຫານ</h3>
+          <p className="text-sm font-semibold text-slate-400">{cartQty} ລາຍການ</p>
+        </div>
+        <button type="button" onClick={closeCart} className="rounded-full bg-slate-100 px-4 py-2 font-bold text-slate-500">ປິດ</button>
+      </div>
+
+      <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
+        {cart.map((item, index) => (
+          <div className="rounded-3xl bg-slate-50 p-3" key={`${item.menuItemId}-${index}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="line-clamp-1 font-extrabold text-slate-800">{item.name}</p>
+                <p className="text-sm font-bold text-orange-600">{shortMoney(item.price)}</p>
+              </div>
+              <div className="flex shrink-0 items-center rounded-full bg-white p-1 shadow-sm">
+                <button type="button" className="h-9 w-9 rounded-full bg-slate-100 text-lg font-black" onClick={() => changeQty(index, -1)}>-</button>
+                <span className="w-10 text-center font-extrabold">{item.quantity}</span>
+                <button type="button" className="h-9 w-9 rounded-full bg-slate-900 text-lg font-black text-white" onClick={() => changeQty(index, 1)}>+</button>
+              </div>
+            </div>
+            <input
+              className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-orange-400"
+              placeholder="ໝາຍເຫດ ເຊັ່ນ ບໍ່ເຜັດ"
+              value={item.note}
+              onChange={(event) => note(index, event.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={submit}
+        className="mt-4 flex w-full items-center justify-between rounded-3xl bg-orange-600 px-5 py-4 text-lg font-extrabold text-white shadow-xl transition active:scale-[0.98]"
+      >
+        <span>ສົ່ງອໍເດີ</span>
+        <span>{shortMoney(cartTotal)}</span>
+      </button>
+    </div>
+  );
 }
 
 export default function Customer() {
@@ -32,26 +145,25 @@ export default function Customer() {
   const tableTokenFromUrl = params.get('t') || '';
   const legacyQr = params.get('qr') || '';
 
+  const [view, setView] = useState('home');
   const [table, setTable] = useState(null);
   const [tableToken, setTableToken] = useState(tableTokenFromUrl);
   const [menus, setMenus] = useState([]);
   const [cats, setCats] = useState([]);
   const [cat, setCat] = useState('recommended');
   const [cart, setCart] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
   const [orders, setOrders] = useState([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [callingStaff, setCallingStaff] = useState(false);
-  const [cartOpen, setCartOpen] = useState(false);
 
   async function load() {
     try {
       setLoading(true);
       setError('');
-
       let nextTable = null;
+
       if (tableTokenFromUrl) {
         nextTable = await api(`/api/tables/session/${encodeURIComponent(tableTokenFromUrl)}`);
       } else if (legacyQr) {
@@ -61,7 +173,6 @@ export default function Customer() {
       }
 
       setTable(nextTable || null);
-
       const nextToken = nextTable?.tableToken || tableTokenFromUrl;
       setTableToken(nextToken);
       if (nextToken) joinTableRoom(nextToken);
@@ -76,8 +187,8 @@ export default function Customer() {
       setCats(Array.isArray(categories) ? categories : []);
 
       if (nextTable?.id && nextToken) {
-        const nextOrders = await api(`/api/orders/table/${nextTable.id}?tableToken=${encodeURIComponent(nextToken)}`);
-        setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+        const orderList = await api(`/api/orders/table/${nextTable.id}?tableToken=${encodeURIComponent(nextToken)}`);
+        setOrders(Array.isArray(orderList) ? orderList : []);
       }
     } catch (err) {
       console.error(err);
@@ -104,16 +215,25 @@ export default function Customer() {
     });
   }, [menus, cat, q]);
 
+  const recommendedMenus = useMemo(() => {
+    const list = filtered.filter((menu) => menu.isRecommended);
+    return (list.length ? list : filtered).slice(0, 4);
+  }, [filtered]);
+
+  const sellerMenus = useMemo(() => {
+    const recommendedIds = new Set(recommendedMenus.map((menu) => menu.id));
+    const list = filtered.filter((menu) => !recommendedIds.has(menu.id));
+    return (list.length ? list : filtered).slice(0, 12);
+  }, [filtered, recommendedMenus]);
+
   const cartQty = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const activeOrders = orders.filter((order) => order.status !== 'CANCELLED');
 
   function add(menu) {
     const alreadyInCart = cart.some((item) => item.menuItemId === menu.id);
-    const alreadyOrdered = orders.some(
-      (order) =>
-        order.status !== 'CANCELLED' &&
-        (order.items || []).some((item) => item.menuItemId === menu.id && item.status !== 'CANCELLED'),
+    const alreadyOrdered = orders.some((order) =>
+      order.status !== 'CANCELLED' &&
+      (order.items || []).some((item) => item.menuItemId === menu.id && item.status !== 'CANCELLED')
     );
 
     if (alreadyInCart || alreadyOrdered) {
@@ -127,7 +247,6 @@ export default function Customer() {
     } else {
       setCart([...cart, { menuItemId: menu.id, name: menu.name, price: menu.price, quantity: 1, note: '' }]);
     }
-
     setCartOpen(true);
   }
 
@@ -135,7 +254,6 @@ export default function Customer() {
     const next = cart
       .map((item, idx) => (idx === index ? { ...item, quantity: item.quantity + amount } : item))
       .filter((item) => item.quantity > 0);
-
     setCart(next);
     if (next.length === 0) setCartOpen(false);
   }
@@ -145,339 +263,237 @@ export default function Customer() {
   }
 
   async function submit() {
-    if (!table?.id || !cart.length || !tableToken || submitting) return;
+    if (!table?.id || !cart.length || !tableToken) return;
 
     try {
-      setSubmitting(true);
-      const order = await api('/api/orders', {
-        method: 'POST',
-        body: { tableToken, items: cart },
-      });
-
+      const order = await api('/api/orders', { method: 'POST', body: { tableToken, items: cart } });
       setCart([]);
       setCartOpen(false);
       setOrders([order, ...orders]);
+      setView('orders');
       alert('ສົ່ງອໍເດີແລ້ວ');
     } catch (err) {
       alert('ສົ່ງອໍເດີບໍ່ສຳເລັດ: ' + err.message);
-    } finally {
-      setSubmitting(false);
     }
   }
 
-  async function callStaff() {
-    if (callingStaff || !tableToken) return;
-
-    try {
-      setCallingStaff(true);
-      await api('/api/orders/call-staff', {
-        method: 'POST',
-        body: { tableToken, tableName: table?.name || '', message: 'ລູກຄ້າເອີ້ນພະນັກງານ' },
-      });
-      alert('ເອີ້ນພະນັກງານແລ້ວ');
-    } catch (err) {
-      alert('ເອີ້ນພະນັກງານບໍ່ສຳເລັດ: ' + err.message);
-    } finally {
-      setCallingStaff(false);
-    }
+  async function callStaff(message = 'ລູກຄ້າເອີ້ນພະນັກງານ') {
+    await api('/api/orders/call-staff', {
+      method: 'POST',
+      body: { tableToken, tableName: table?.name || '', message },
+    }).catch(() => null);
+    alert(message === 'ລູກຄ້າຂໍເກັບເງິນ' ? 'ເອີ້ນເກັບເງິນແລ້ວ' : 'ເອີ້ນພະນັກງານແລ້ວ');
   }
 
-  const cartPanel = (
-    <div className="flex h-full flex-col rounded-t-[28px] bg-white shadow-2xl ring-1 ring-slate-100 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:rounded-[32px]">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-orange-500">Cart</p>
-          <h3 className="text-base font-black text-slate-950 sm:text-lg">ກະຕ່າອໍເດີ</h3>
-        </div>
-        <button
-          type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-lg font-black text-slate-600 md:hidden"
-          onClick={() => setCartOpen(false)}
-          aria-label="close cart"
-        >
-          ×
-        </button>
-      </div>
-
-      {cart.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-5 py-12 text-center">
-          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-3xl">🧺</div>
-          <p className="font-bold text-slate-700">ຍັງບໍ່ມີລາຍການ</p>
-          <p className="mt-1 text-sm text-slate-400">ເລືອກເມນູແລ້ວກົດ + ເພື່ອສັ່ງ</p>
-        </div>
-      ) : (
-        <>
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5 md:max-h-[52vh]">
-            {cart.map((item, index) => (
-              <div className="rounded-3xl bg-slate-50 p-3 ring-1 ring-slate-100" key={`${item.menuItemId}-${index}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="line-clamp-2 font-bold leading-snug text-slate-950">{item.name}</p>
-                    <p className="mt-1 text-sm font-bold text-orange-600">{money(item.price)}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
-                    <button
-                      type="button"
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg font-black text-slate-700 active:scale-95"
-                      onClick={() => changeQty(index, -1)}
-                    >
-                      -
-                    </button>
-                    <span className="w-9 text-center text-sm font-black text-slate-950">{item.quantity}</span>
-                    <button
-                      type="button"
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-lg font-black text-white active:scale-95"
-                      onClick={() => changeQty(index, 1)}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                <input
-                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-orange-400"
-                  placeholder="ໝາຍເຫດ ເຊັ່ນ ບໍ່ເຜັດ"
-                  value={item.note}
-                  onChange={(event) => note(index, event.target.value)}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-slate-100 p-4 sm:p-5">
-            <div className="mb-3 flex items-center justify-between text-sm">
-              <span className="text-slate-500">ລວມ {cartQty} ລາຍການ</span>
-              <span className="text-xl font-black text-slate-950">{money(cartTotal)}</span>
-            </div>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-3xl bg-slate-950 px-5 py-4 font-black text-white shadow-xl shadow-slate-300 active:scale-[0.99] disabled:opacity-60"
-              onClick={submit}
-              disabled={submitting}
-            >
-              <span>{submitting ? 'ກຳລັງສົ່ງ...' : `ສົ່ງອໍເດີ ${cartQty} ລາຍການ`}</span>
-              <span>{money(cartTotal)}</span>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
+  const tableName = table?.name || '...';
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="mx-auto w-full max-w-7xl md:px-4 md:py-4 lg:px-6">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_360px] lg:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="min-w-0 overflow-hidden bg-white shadow-xl md:rounded-[36px]">
-            <section className="sticky top-0 z-30 border-b border-slate-100 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85">
-              <div className="px-4 pb-3 pt-[calc(env(safe-area-inset-top)+14px)] sm:px-5 md:px-6 md:pt-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">ໂຕະຂອງທ່ານ</p>
-                    <h1 className="truncate text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
-                      ໂຕະ {table?.name || '...'}
-                    </h1>
-                  </div>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-full bg-orange-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-orange-100 active:scale-95 disabled:opacity-60 sm:px-5"
-                    onClick={callStaff}
-                    disabled={callingStaff || !tableToken}
-                  >
-                    {callingStaff ? 'ກຳລັງເອີ້ນ...' : 'ເອີ້ນພະນັກງານ'}
-                  </button>
-                </div>
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="mx-auto min-h-screen max-w-md bg-white shadow-2xl lg:max-w-5xl">
+        {view === 'home' && (
+          <section className="min-h-screen bg-white px-4 pb-28 pt-8 sm:px-6 lg:px-8">
+            <header className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-black tracking-tight text-slate-800 sm:text-3xl">BPOS Restaurant</h1>
+                <p className="mt-3 flex items-start gap-2 text-base font-medium leading-snug text-slate-500">
+                  <span className="text-2xl text-slate-300">📍</span>
+                  <span>ສັ່ງອາຫານຜ່ານ QR Code</span>
+                </p>
+              </div>
+              <button className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xl shadow-xl ring-1 ring-slate-100" type="button">
+                🇱🇦 <span className="text-sm">⌄</span>
+              </button>
+            </header>
 
-                <div className="mt-4 flex items-center gap-3 rounded-3xl bg-slate-100 px-4 py-3 ring-1 ring-slate-100 focus-within:bg-white focus-within:ring-orange-200">
-                  <span className="text-lg text-slate-400">🔍</span>
+            <div className="mt-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-yellow-300 via-orange-400 to-orange-600 p-6 text-white shadow-xl">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-lg font-black opacity-90">BPOS QR</p>
+                  <h2 className="mt-2 text-4xl font-black leading-none tracking-tight">ເມນູດິຈິຕອນ</h2>
+                  <p className="mt-3 max-w-[250px] text-base font-bold text-white/90">ສັ່ງອາຫານ, ເອີ້ນພະນັກງານ ໄດ້ຈາກໂທລະສັບຂອງທ່ານ</p>
+                </div>
+                <div className="hidden text-7xl sm:block">🍔</div>
+              </div>
+              <div className="mt-5 h-1 w-10 rounded-full bg-white/70" />
+            </div>
+
+            <div className="mt-7 text-center">
+              <h2 className="text-2xl font-black text-slate-800">🌙 ສະບາຍດີ</h2>
+              <p className="mt-3 text-lg font-medium text-slate-600">
+                ພວກເຮົາຈະນຳອາຫານໄປໃຫ້ທ່ານທີ່ໂຕະ: <span className="rounded-full border-2 border-slate-800 px-3 py-0.5 font-black text-slate-900">{tableName}</span>
+              </p>
+            </div>
+
+            {error && <div className="mt-5 rounded-3xl bg-red-50 p-4 text-sm font-bold text-red-600">{error}</div>}
+
+            <div className="mt-6 flex items-center justify-between rounded-3xl bg-sky-100 p-4 shadow-sm ring-1 ring-sky-200">
+              <div className="flex items-center gap-4">
+                <div className="text-5xl">🎁</div>
+                <div>
+                  <p className="text-lg font-black leading-tight text-sky-700">ໃສ່ເບີໂທເພື່ອສະສົມແຕ້ມ</p>
+                  <p className="mt-1 text-sm font-semibold text-sky-500">ຟັງຊັນນີ້ສາມາດເພີ່ມຕໍ່ໄດ້</p>
+                </div>
+              </div>
+              <span className="text-4xl font-black text-sky-600">›</span>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <button type="button" onClick={() => callStaff('ລູກຄ້າຂໍເກັບເງິນ')} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-orange-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
+                <p className="text-base font-black text-slate-800">ເກັບເງິນ</p>
+                <div className="mt-5 text-5xl">💳</div>
+              </button>
+              <button type="button" onClick={() => callStaff()} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-emerald-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
+                <p className="text-base font-black text-slate-800">ເອີ້ນພະນັກງານ</p>
+                <div className="mt-5 text-5xl">🧑‍🍳</div>
+              </button>
+              <button type="button" onClick={() => setView('orders')} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-yellow-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
+                <p className="text-base font-black text-slate-800">ອໍເດີຂອງຂ້ອຍ</p>
+                <div className="mt-5 text-5xl">⭐</div>
+              </button>
+            </div>
+
+            <button type="button" onClick={() => setView('menu')} className="mt-6 flex min-h-[110px] w-full items-center justify-between overflow-hidden rounded-[28px] bg-gradient-to-r from-orange-500 via-orange-400 to-yellow-300 px-6 text-left text-white shadow-xl active:scale-[0.99]">
+              <span className="text-2xl font-black">ເບິ່ງເມນູ - ສັ່ງອາຫານ</span>
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/30 text-4xl font-black">›</span>
+            </button>
+
+            <button type="button" onClick={() => callStaff()} className="fixed bottom-8 right-6 z-40 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100 text-5xl shadow-2xl ring-1 ring-yellow-200 active:scale-95 lg:right-[calc(50%-480px)]">
+              📣
+            </button>
+          </section>
+        )}
+
+        {view === 'menu' && (
+          <section className="min-h-screen bg-slate-50 pb-32">
+            <div className="sticky top-0 z-30 bg-white/95 px-3 pb-4 pt-6 shadow-sm backdrop-blur sm:px-5">
+              <div className="flex items-center gap-3">
+                <IconButton onClick={() => setView('home')}>⌂</IconButton>
+                <label className="flex h-12 flex-1 items-center gap-3 rounded-2xl bg-slate-100 px-4 ring-1 ring-slate-200">
+                  <span className="text-2xl text-slate-300">⌕</span>
                   <input
-                    className="w-full bg-transparent text-base outline-none placeholder:text-slate-400"
-                    placeholder="ຄົ້ນຫາເມນູ"
+                    className="w-full bg-transparent text-base font-semibold outline-none placeholder:text-slate-300"
+                    placeholder="ທ່ານຕ້ອງການຊອກຫາຫຍັງ?"
                     value={q}
                     onChange={(event) => setQ(event.target.value)}
                   />
-                  {q && (
-                    <button
-                      type="button"
-                      className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500"
-                      onClick={() => setQ('')}
-                    >
-                      ລ້າງ
-                    </button>
-                  )}
-                </div>
+                </label>
               </div>
-            </section>
 
-            {error && (
-              <div className="mx-4 mt-4 rounded-3xl bg-red-50 p-4 text-sm font-bold text-red-600 ring-1 ring-red-100 sm:mx-5 md:mx-6">
-                {error}
-              </div>
-            )}
-
-            <section className="px-4 pt-4 sm:px-5 md:px-6">
-              <div className="overflow-hidden rounded-[32px] bg-gradient-to-br from-orange-500 via-red-500 to-rose-500 p-4 text-white shadow-xl shadow-orange-100 sm:p-5 md:p-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-white/20 text-4xl ring-1 ring-white/20 sm:h-20 sm:w-20 sm:text-5xl">
-                    🍜
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white/80">Welcome to</p>
-                    <h2 className="text-2xl font-black leading-tight sm:text-3xl">BIPOS</h2>
-                    <p className="mt-1 text-sm text-white/80 sm:text-base">ອາຫານ · ເຄື່ອງດື່ມ · ຂອງຫວານ</p>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid grid-cols-3 gap-2 text-center text-xs sm:gap-3 sm:text-sm">
-                  <div className="rounded-3xl bg-white/15 p-3 ring-1 ring-white/10">
-                    <p className="font-black">15-25</p>
-                    <p className="mt-1 text-white/75">ນາທີ</p>
-                  </div>
-                  <div className="rounded-3xl bg-white/15 p-3 ring-1 ring-white/10">
-                    <p className="font-black">4.8</p>
-                    <p className="mt-1 text-white/75">ຄະແນນ</p>
-                  </div>
-                  <div className="rounded-3xl bg-white/15 p-3 ring-1 ring-white/10">
-                    <p className="font-black">ເປີດຢູ່</p>
-                    <p className="mt-1 text-white/75">ມື້ນີ້</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="sticky top-[120px] z-20 bg-white/95 px-4 py-4 backdrop-blur sm:px-5 md:static md:px-6 md:pt-5">
-              <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6">
-                <Tab active={cat === 'all'} onClick={() => setCat('all')}>
-                  ທັງໝົດ
-                </Tab>
-                <Tab active={cat === 'recommended'} onClick={() => setCat('recommended')}>
-                  ແນະນຳ
-                </Tab>
-                {cats.map((category) => (
-                  <Tab key={category.id} active={cat === category.id} onClick={() => setCat(category.id)}>
-                    {category.name}
-                  </Tab>
+              <div className="mt-5 grid grid-flow-col grid-rows-2 gap-3 overflow-x-auto pb-1">
+                <CategoryButton active={cat === 'recommended'} onClick={() => setCat('recommended')}>ເມນູໃໝ່</CategoryButton>
+                <CategoryButton active={cat === 'all'} onClick={() => setCat('all')}>ຂາຍດີ</CategoryButton>
+                {cats.map((item) => (
+                  <CategoryButton key={item.id} active={cat === item.id} onClick={() => setCat(item.id)}>
+                    {item.name}
+                  </CategoryButton>
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section className="px-4 sm:px-5 md:px-6">
-              <div className="flex items-center justify-between gap-3 rounded-[28px] border border-amber-100 bg-amber-50 p-4 sm:p-5">
-                <div>
-                  <p className="text-sm font-black text-amber-700 sm:text-base">ໂປຣໂມຊັນມື້ນີ້</p>
-                  <p className="mt-1 text-xs leading-relaxed text-amber-600 sm:text-sm">
-                    ສັ່ງຄົບ 300,000 ກີບ ຮັບຟຣີ ຊາເຢັນ 1 ແກ້ວ
-                  </p>
+            {error && <div className="mx-4 mt-5 rounded-3xl bg-red-50 p-4 text-sm font-bold text-red-600">{error}</div>}
+
+            <div className="px-4 pt-5 sm:px-6 lg:px-8">
+              <section className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-rose-50 via-orange-50 to-yellow-100 p-5 shadow-sm ring-1 ring-orange-100">
+                <div className="absolute right-3 top-[-4px] rotate-12 rounded-full bg-pink-500 px-4 py-3 text-sm font-black text-white shadow-lg">NEW</div>
+                <h2 className="mb-5 text-2xl font-black text-slate-800">ເມນູໃໝ່ຕ້ອງລອງ</h2>
+
+                {loading && <EmptyBox>ກຳລັງໂຫຼດ...</EmptyBox>}
+                {!loading && recommendedMenus.length === 0 && <EmptyBox>ບໍ່ພົບເມນູ</EmptyBox>}
+
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                  {recommendedMenus.map((menu) => (
+                    <MenuCard key={menu.id} menu={menu} onAdd={add} />
+                  ))}
                 </div>
-                <div className="shrink-0 text-4xl">🥤</div>
-              </div>
-            </section>
+              </section>
 
-            <section className="px-4 pb-32 pt-5 sm:px-5 md:px-6 md:pb-10">
-              <div className="mb-3 flex items-end justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-black text-slate-950 sm:text-2xl">ເມນູ</h3>
-                  <p className="mt-1 text-sm text-slate-500">ພົບ {filtered.length} ລາຍການ</p>
+              <section className="mt-7 rounded-[32px] bg-gradient-to-br from-cyan-50 via-emerald-50 to-green-100 p-5 shadow-sm ring-1 ring-emerald-100">
+                <div className="mb-5 flex items-center justify-between">
+                  <h2 className="text-2xl font-black text-slate-800">ຂາຍດີ</h2>
+                  <span className="text-5xl">🏅</span>
                 </div>
-                {cartQty > 0 && (
-                  <button
-                    type="button"
-                    className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white md:hidden"
-                    onClick={() => setCartOpen(true)}
-                  >
-                    ກະຕ່າ {cartQty}
-                  </button>
-                )}
+
+                {!loading && sellerMenus.length === 0 && <EmptyBox>ບໍ່ພົບເມນູ</EmptyBox>}
+                <div className="space-y-4">
+                  {sellerMenus.map((menu) => (
+                    <MenuCard key={menu.id} menu={menu} onAdd={add} compact />
+                  ))}
+                </div>
+              </section>
+            </div>
+          </section>
+        )}
+
+        {view === 'orders' && (
+          <section className="min-h-screen bg-[radial-gradient(circle_at_30%_20%,rgba(14,165,233,0.08),transparent_26%),radial-gradient(circle_at_70%_35%,rgba(251,146,60,0.08),transparent_24%)] bg-white pb-24">
+            <header className="bg-white px-4 pb-7 pt-9 shadow-sm sm:px-6 lg:px-8">
+              <div className="flex items-center gap-4">
+                <IconButton onClick={() => setView('home')}>⌂</IconButton>
+                <h1 className="text-4xl font-black tracking-tight text-slate-800">ອາຫານທີ່ສັ່ງ</h1>
               </div>
+              <button type="button" onClick={() => setView('home')} className="ml-16 mt-4 text-xl font-bold text-sky-700">‹ ກັບຄືນ</button>
+            </header>
 
-              {loading && <Empty>ກຳລັງໂຫຼດ...</Empty>}
-              {!loading && filtered.length === 0 && <Empty>ບໍ່ພົບເມນູ</Empty>}
+            <div className="px-4 pt-8 sm:px-6 lg:px-8">
+              {orders.length === 0 && <EmptyBox>ຍັງບໍ່ມີອໍເດີ</EmptyBox>}
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((menu) => (
-                  <article
-                    className="group flex gap-3 rounded-[28px] border border-slate-100 bg-white p-3 shadow-sm transition active:scale-[0.99] sm:flex-col sm:p-3.5 sm:hover:-translate-y-0.5 sm:hover:shadow-lg"
-                    key={menu.id}
-                  >
-                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-3xl bg-slate-100 sm:h-40 sm:w-full md:h-44">
-                      {itemImage(menu) ? (
-                        <img alt={menu.name} className="h-full w-full object-cover" src={itemImage(menu)} loading="lazy" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-4xl sm:text-5xl">🍽️</div>
-                      )}
+              <div className="space-y-4">
+                {orders.map((order) => (
+                  <article key={order.id} className="rounded-3xl bg-white/95 p-5 shadow-sm ring-1 ring-slate-200">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl text-slate-400">◷</span>
+                        <div>
+                          <p className="text-2xl font-black text-slate-800">{getOrderTime(order)} - ທ່ານສັ່ງ:</p>
+                          <p className="text-sm font-semibold text-slate-400">#{order.orderNumber || order.id}</p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-xl bg-green-50 px-3 py-2 text-sm font-black text-green-600">{statusText[order.status] || order.status}</span>
                     </div>
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <div>
-                        <h4 className="line-clamp-2 text-base font-black leading-snug text-slate-950 sm:text-lg">{menu.name}</h4>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 sm:text-sm">
-                          {menu.description || '-'}
-                        </p>
-                      </div>
-                      <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-                        <p className="text-base font-black text-orange-600 sm:text-lg">{money(menu.price)}</p>
-                        <button
-                          type="button"
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-500 text-2xl font-black text-white shadow-lg shadow-orange-100 active:scale-95"
-                          onClick={() => add(menu)}
-                          aria-label={`add ${menu.name}`}
-                        >
-                          +
-                        </button>
-                      </div>
+
+                    <div className="space-y-3 border-l-2 border-slate-100 pl-6">
+                      {(order.items || []).map((item) => (
+                        <div key={item.id || `${item.menuItemId}-${item.name}`} className="flex items-start justify-between gap-4 text-lg">
+                          <span className="min-w-0 text-slate-700">{item.quantity || 1} x {item.menuItem?.name || item.menuName || item.name || 'ເມນູ'}</span>
+                          <span className="shrink-0 font-semibold text-slate-700">{shortMoney(item.price || item.unitPrice || 0)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                      <span className="font-black text-slate-500">ລວມ</span>
+                      <span className="text-xl font-black text-orange-600">{shortMoney(order.total || 0)}</span>
                     </div>
                   </article>
                 ))}
               </div>
+            </div>
+          </section>
+        )}
 
-              <div className="mt-8">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-slate-950 sm:text-2xl">ອໍເດີຂອງຂ້ອຍ</h3>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">
-                    {activeOrders.length} active
-                  </span>
-                </div>
-
-                {orders.length === 0 && <Empty>ຍັງບໍ່ມີອໍເດີ</Empty>}
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {orders.map((order) => (
-                    <div className="rounded-[28px] bg-slate-50 p-4 ring-1 ring-slate-100" key={order.id}>
-                      <div className="flex items-center justify-between gap-2">
-                        <b className="truncate text-slate-950">#{order.orderNumber}</b>
-                        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${getStatusClass(order.status)}`}>
-                          {statusText[order.status] || order.status}
-                        </span>
-                      </div>
-                      <p className="mt-3 text-lg font-black text-orange-600">{money(order.total)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <aside className="hidden md:block">{cartPanel}</aside>
-        </div>
-      </div>
-
-      {cart.length > 0 && !cartOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-100 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-2xl backdrop-blur md:hidden">
+        {cartQty > 0 && !cartOpen && view !== 'orders' && (
           <button
             type="button"
-            className="flex w-full items-center justify-between rounded-3xl bg-slate-950 px-5 py-4 font-black text-white shadow-xl active:scale-[0.99]"
             onClick={() => setCartOpen(true)}
+            className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md items-center justify-between rounded-3xl bg-slate-900 px-5 py-4 text-white shadow-2xl active:scale-[0.98] lg:max-w-xl"
           >
-            <span>ເບິ່ງກະຕ່າ {cartQty} ລາຍການ</span>
-            <span>{money(cartTotal)}</span>
+            <span className="font-black">🛒 {cartQty} ລາຍການ</span>
+            <span className="font-black">{shortMoney(cartTotal)}</span>
           </button>
-        </div>
-      )}
+        )}
 
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 backdrop-blur-[2px] md:hidden">
-          <button className="absolute inset-0" type="button" onClick={() => setCartOpen(false)} aria-label="close cart overlay" />
-          <div className="relative max-h-[88vh] w-full pb-[env(safe-area-inset-bottom)]">{cartPanel}</div>
-        </div>
-      )}
+        {cartQty > 0 && cartOpen && (
+          <CartPanel
+            cart={cart}
+            cartQty={cartQty}
+            cartTotal={cartTotal}
+            changeQty={changeQty}
+            note={note}
+            submit={submit}
+            closeCart={() => setCartOpen(false)}
+          />
+        )}
+      </div>
     </main>
   );
 }
