@@ -135,7 +135,7 @@ async function speakText(text) {
         utterance.lang = "lo-LA";
       }
 
-      utterance.rate = 0.88;
+      utterance.rate = 0.86;
       utterance.pitch = 1;
       utterance.volume = 1;
 
@@ -188,8 +188,8 @@ export async function enableNotifySound() {
 }
 
 export function isNotifySoundEnabled() {
-  // ສຳຄັນ: browser ຈະອະນຸຍາດສຽງຫຼັງຈາກ user ກົດປຸ່ມໃນ tab ນັ້ນແລ້ວເທົ່ານັ້ນ.
-  // ດັ່ງນັ້ນ reload / ເຄື່ອງໃໝ່ / browser ໃໝ່ ຕ້ອງກົດເປີດສຽງອີກຄັ້ງ.
+  // Browser ອະນຸຍາດໃຫ້ມີສຽງຫຼັງຈາກ user ກົດປຸ່ມໃນ tab ນັ້ນເທົ່ານັ້ນ.
+  // Reload / ເຄື່ອງໃໝ່ / browser ໃໝ່ ຕ້ອງກົດເປີດສຽງອີກຄັ້ງ.
   return unlocked;
 }
 
@@ -228,6 +228,170 @@ function getTableName(payload) {
   );
 }
 
+// ถ้ามีชื่อโต๊ะที่ browser อ่านไม่ตรง ให้เพิ่มตรงนี้ได้เลย
+// ตัวอย่าง: A1: "ເອ ໜຶ່ງ", VIP1: "ວີ ໄອ ພີ ໜຶ່ງ"
+const TABLE_VOICE_OVERRIDES = {
+  A1: "ເອ ໜຶ່ງ",
+  A2: "ເອ ສອງ",
+  A3: "ເອ ສາມ",
+  A4: "ເອ ສີ່",
+  A5: "ເອ ຫ້າ",
+  A6: "ເອ ຫົກ",
+  A7: "ເອ ເຈັດ",
+  A8: "ເອ ແປດ",
+  A9: "ເອ ເກົ້າ",
+  A10: "ເອ ສິບ",
+
+  B1: "ບີ ໜຶ່ງ",
+  B2: "ບີ ສອງ",
+  B3: "ບີ ສາມ",
+  B4: "ບີ ສີ່",
+  B5: "ບີ ຫ້າ",
+  B6: "ບີ ຫົກ",
+  B7: "ບີ ເຈັດ",
+  B8: "ບີ ແປດ",
+  B9: "ບີ ເກົ້າ",
+  B10: "ບີ ສິບ",
+
+  C1: "ຊີ ໜຶ່ງ",
+  C2: "ຊີ ສອງ",
+  C3: "ຊີ ສາມ",
+  C4: "ຊີ ສີ່",
+  C5: "ຊີ ຫ້າ",
+  C6: "ຊີ ຫົກ",
+  C7: "ຊີ ເຈັດ",
+  C8: "ຊີ ແປດ",
+  C9: "ຊີ ເກົ້າ",
+  C10: "ຊີ ສິບ",
+
+  VIP1: "ວີ ໄອ ພີ ໜຶ່ງ",
+  VIP2: "ວີ ໄອ ພີ ສອງ",
+  VIP3: "ວີ ໄອ ພີ ສາມ",
+};
+
+const LETTER_VOICE = {
+  A: "ເອ",
+  B: "ບີ",
+  C: "ຊີ",
+  D: "ດີ",
+  E: "ອີ",
+  F: "ເອັຟ",
+  G: "ຈີ",
+  H: "ເອດ",
+  I: "ໄອ",
+  J: "ເຈ",
+  K: "ເຄ",
+  L: "ແອວ",
+  M: "ເອັມ",
+  N: "ເອັນ",
+  O: "ໂອ",
+  P: "ພີ",
+  Q: "ຄິວ",
+  R: "ອາ",
+  S: "ເອັດ",
+  T: "ທີ",
+  U: "ຢູ",
+  V: "ວີ",
+  W: "ດັບເບິນຢູ",
+  X: "ເອັກ",
+  Y: "ວາຍ",
+  Z: "ແຊດ",
+};
+
+const DIGIT_VOICE = {
+  0: "ສູນ",
+  1: "ໜຶ່ງ",
+  2: "ສອງ",
+  3: "ສາມ",
+  4: "ສີ່",
+  5: "ຫ້າ",
+  6: "ຫົກ",
+  7: "ເຈັດ",
+  8: "ແປດ",
+  9: "ເກົ້າ",
+};
+
+function numberVoice(value) {
+  const number = Number.parseInt(String(value || "0"), 10);
+
+  if (!Number.isFinite(number)) {
+    return String(value || "")
+      .split("")
+      .map((char) => DIGIT_VOICE[char] || char)
+      .join(" ");
+  }
+
+  if (number < 10) return DIGIT_VOICE[number] || String(number);
+  if (number === 10) return "ສິບ";
+  if (number === 20) return "ຊາວ";
+
+  if (number > 10 && number < 20) {
+    const ones = number % 10;
+    return ones === 1 ? "ສິບ ເອັດ" : `ສິບ ${DIGIT_VOICE[ones]}`;
+  }
+
+  if (number > 20 && number < 100) {
+    const tens = Math.floor(number / 10);
+    const ones = number % 10;
+    const tensText = tens === 2 ? "ຊາວ" : `${DIGIT_VOICE[tens]} ສິບ`;
+
+    if (ones === 0) return tensText;
+    if (ones === 1) return `${tensText} ເອັດ`;
+    return `${tensText} ${DIGIT_VOICE[ones]}`;
+  }
+
+  // 100 ขึ้นไปให้อ่านแยกตัวเลข เพื่อให้ TTS ไม่เพี้ยน
+  return String(number)
+    .split("")
+    .map((char) => DIGIT_VOICE[char] || char)
+    .join(" ");
+}
+
+function tableVoiceName(tableName) {
+  const raw = String(tableName || "-").trim();
+  if (!raw || raw === "-") return "-";
+
+  const clean = raw
+    .replace(/^ໂຕະ\s*/i, "")
+    .replace(/^โต๊ะ\s*/i, "")
+    .replace(/^table\s*/i, "")
+    .replace(/[\s_-]+/g, "")
+    .toUpperCase();
+
+  if (!clean) return raw;
+
+  if (TABLE_VOICE_OVERRIDES[clean]) {
+    return TABLE_VOICE_OVERRIDES[clean];
+  }
+
+  const match = clean.match(/^([A-Z]+)(\d+)$/);
+  if (match) {
+    const letters = match[1]
+      .split("")
+      .map((char) => LETTER_VOICE[char] || char)
+      .join(" ");
+    const numbers = numberVoice(match[2]);
+    return `${letters} ${numbers}`;
+  }
+
+  if (/^\d+$/.test(clean)) {
+    return numberVoice(clean);
+  }
+
+  return clean
+    .split("")
+    .map((char) => {
+      if (LETTER_VOICE[char]) return LETTER_VOICE[char];
+      if (DIGIT_VOICE[char]) return DIGIT_VOICE[char];
+      return char;
+    })
+    .join(" ");
+}
+
+function getTableVoiceName(payload) {
+  return tableVoiceName(getTableName(payload));
+}
+
 function getItems(payload) {
   if (Array.isArray(payload?.items)) return payload.items;
   if (Array.isArray(payload?.orderItems)) return payload.orderItems;
@@ -263,7 +427,7 @@ function itemsVoiceText(items) {
 }
 
 export function orderVoiceText(order) {
-  const tableName = getTableName(order);
+  const tableName = getTableVoiceName(order);
   const items = getItems(order);
   const itemText = itemsVoiceText(items);
 
@@ -275,7 +439,7 @@ export function orderVoiceText(order) {
 }
 
 export function readyServeVoiceText(payload) {
-  const tableName = getTableName(payload);
+  const tableName = getTableVoiceName(payload);
   const items = getItems(payload);
   const itemText = itemsVoiceText(items);
 
@@ -287,6 +451,6 @@ export function readyServeVoiceText(payload) {
 }
 
 export function staffCallVoiceText(payload) {
-  const tableName = getTableName(payload);
+  const tableName = getTableVoiceName(payload);
   return `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`;
 }
