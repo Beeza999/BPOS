@@ -367,15 +367,6 @@ export default function Customer() {
               <span className="text-2xl font-black">ເບິ່ງເມນູ - ສັ່ງອາຫານ</span>
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/30 text-4xl font-black">›</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => callStaff()}
-              className="fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-sky-500 text-3xl shadow-2xl shadow-emerald-300 ring-4 ring-white active:scale-95 sm:h-20 sm:w-20 sm:text-4xl lg:right-[calc(50%-480px)]"
-              aria-label="ເອີ້ນພະນັກງານ"
-            >
-              📣
-            </button>
           </section>
         )}
 
