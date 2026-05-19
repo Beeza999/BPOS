@@ -342,9 +342,20 @@ export default function Customer() {
                 <p className="text-base font-black text-slate-800">ເກັບເງິນ</p>
                 <div className="mt-5 text-5xl">💳</div>
               </button>
-              <button type="button" onClick={() => callStaff()} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-emerald-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
-                <p className="text-base font-black text-slate-800">ເອີ້ນພະນັກງານ</p>
-                <div className="mt-5 text-5xl">🧑‍🍳</div>
+              <button
+                type="button"
+                onClick={() => callStaff()}
+                className="relative min-h-[128px] overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 via-teal-500 to-sky-500 p-3 text-left text-white shadow-lg shadow-emerald-200 ring-2 ring-emerald-200 active:scale-95"
+                aria-label="ເອີ້ນພະນັກງານ"
+              >
+                <span className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-white/20" />
+                <span className="inline-flex rounded-full bg-white/25 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Call Staff</span>
+                <p className="mt-2 text-lg font-black leading-tight drop-shadow-sm">ເອີ້ນພະນັກງານ</p>
+                <p className="mt-1 text-[11px] font-bold leading-tight text-white/90">ກົດເພື່ອໃຫ້ພະນັກງານມາທີ່ໂຕະ</p>
+                <div className="mt-3 flex items-end justify-between">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-3xl shadow-sm">🔔</span>
+                  <span className="text-5xl drop-shadow-sm">🧑‍🍳</span>
+                </div>
               </button>
               <button type="button" onClick={() => setView('orders')} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-yellow-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
                 <p className="text-base font-black text-slate-800">ອໍເດີຂອງຂ້ອຍ</p>
@@ -357,7 +368,12 @@ export default function Customer() {
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/30 text-4xl font-black">›</span>
             </button>
 
-            <button type="button" onClick={() => callStaff()} className="fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 text-4xl shadow-2xl ring-1 ring-yellow-200 active:scale-95 sm:h-20 sm:w-20 sm:text-5xl lg:right-[calc(50%-480px)]">
+            <button
+              type="button"
+              onClick={() => callStaff()}
+              className="fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-sky-500 text-3xl shadow-2xl shadow-emerald-300 ring-4 ring-white active:scale-95 sm:h-20 sm:w-20 sm:text-4xl lg:right-[calc(50%-480px)]"
+              aria-label="ເອີ້ນພະນັກງານ"
+            >
               📣
             </button>
           </section>
