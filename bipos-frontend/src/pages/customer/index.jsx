@@ -288,10 +288,10 @@ export default function Customer() {
   const tableName = table?.name || '...';
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto min-h-screen max-w-md bg-white shadow-2xl lg:max-w-5xl">
+    <main className="min-h-screen w-full overflow-x-hidden bg-white text-slate-900 lg:bg-slate-100">
+      <div className="mx-auto min-h-screen w-full bg-white lg:max-w-5xl lg:shadow-2xl">
         {view === 'home' && (
-          <section className="min-h-screen bg-white px-4 pb-28 pt-8 sm:px-6 lg:px-8">
+          <section className="min-h-screen w-full bg-white px-4 pb-28 pt-[calc(24px+env(safe-area-inset-top))] sm:px-6 lg:px-8">
             <header className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h1 className="text-2xl font-black tracking-tight text-slate-800 sm:text-3xl">BPOS Restaurant</h1>
@@ -357,15 +357,15 @@ export default function Customer() {
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/30 text-4xl font-black">›</span>
             </button>
 
-            <button type="button" onClick={() => callStaff()} className="fixed bottom-8 right-6 z-40 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100 text-5xl shadow-2xl ring-1 ring-yellow-200 active:scale-95 lg:right-[calc(50%-480px)]">
+            <button type="button" onClick={() => callStaff()} className="fixed bottom-[calc(24px+env(safe-area-inset-bottom))] right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 text-4xl shadow-2xl ring-1 ring-yellow-200 active:scale-95 sm:h-20 sm:w-20 sm:text-5xl lg:right-[calc(50%-480px)]">
               📣
             </button>
           </section>
         )}
 
         {view === 'menu' && (
-          <section className="min-h-screen bg-slate-50 pb-32">
-            <div className="sticky top-0 z-30 bg-white/95 px-3 pb-4 pt-6 shadow-sm backdrop-blur sm:px-5">
+          <section className="min-h-screen w-full bg-slate-50 pb-[calc(128px+env(safe-area-inset-bottom))]">
+            <div className="sticky top-0 z-30 w-full bg-white/95 px-3 pb-4 pt-[calc(16px+env(safe-area-inset-top))] shadow-sm backdrop-blur sm:px-5">
               <div className="flex items-center gap-3">
                 <IconButton onClick={() => setView('home')}>⌂</IconButton>
                 <label className="flex h-12 flex-1 items-center gap-3 rounded-2xl bg-slate-100 px-4 ring-1 ring-slate-200">
@@ -425,8 +425,8 @@ export default function Customer() {
         )}
 
         {view === 'orders' && (
-          <section className="min-h-screen bg-[radial-gradient(circle_at_30%_20%,rgba(14,165,233,0.08),transparent_26%),radial-gradient(circle_at_70%_35%,rgba(251,146,60,0.08),transparent_24%)] bg-white pb-24">
-            <header className="bg-white px-4 pb-7 pt-9 shadow-sm sm:px-6 lg:px-8">
+          <section className="min-h-screen w-full bg-[radial-gradient(circle_at_30%_20%,rgba(14,165,233,0.08),transparent_26%),radial-gradient(circle_at_70%_35%,rgba(251,146,60,0.08),transparent_24%)] bg-white pb-[calc(96px+env(safe-area-inset-bottom))]">
+            <header className="bg-white px-4 pb-7 pt-[calc(28px+env(safe-area-inset-top))] shadow-sm sm:px-6 lg:px-8">
               <div className="flex items-center gap-4">
                 <IconButton onClick={() => setView('home')}>⌂</IconButton>
                 <h1 className="text-4xl font-black tracking-tight text-slate-800">ອາຫານທີ່ສັ່ງ</h1>
@@ -475,7 +475,7 @@ export default function Customer() {
           <button
             type="button"
             onClick={() => setCartOpen(true)}
-            className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md items-center justify-between rounded-3xl bg-slate-900 px-5 py-4 text-white shadow-2xl active:scale-[0.98] lg:max-w-xl"
+            className="fixed inset-x-4 bottom-[calc(16px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-md items-center justify-between rounded-3xl bg-slate-900 px-5 py-4 text-white shadow-2xl active:scale-[0.98] lg:max-w-xl"
           >
             <span className="font-black">🛒 {cartQty} ລາຍການ</span>
             <span className="font-black">{shortMoney(cartTotal)}</span>
