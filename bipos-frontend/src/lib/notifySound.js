@@ -65,15 +65,38 @@ function getAudioContext() {
 }
 
 async function unlockAudio() {
-  const context = getAudioContext();
+  try {
+    const context = getAudioContext();
 
-  if (context && context.state === "suspended") {
-    await context.resume();
+    if (context && context.state === "suspended") {
+      await context.resume();
+    }
+
+    // สำคัญสำหรับ iPhone / iPad Safari
+    if (hasWindow() && window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(" ");
+
+      utterance.volume = 0.01;
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.lang = "lo-LA";
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    }
+
+    unlocked = true;
+
+    localStorage.setItem(SOUND_KEY, "1");
+
+    return true;
+  } catch (error) {
+    console.warn("unlockAudio failed:", error);
+
+    unlocked = false;
+
+    return false;
   }
-
-  unlocked = true;
-  localStorage.setItem(SOUND_KEY, "1");
-  return true;
 }
 
 function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.22 } = {}) {
@@ -169,20 +192,37 @@ async function speakText(text) {
 
 export async function enableNotifySound() {
   try {
-    await unlockAudio();
-    await playNotifyBell();
+    const ok = await unlockAudio();
 
+    if (!ok) {
+      return false;
+    }
+
+    // เล่น bell ก่อน
+    try {
+      await playNotifyBell();
+    } catch (error) {
+      console.warn("Bell failed:", error);
+    }
+
+    // รอ iPhone Safari unlock speech
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    // ทดสอบเสียงพูด
     try {
       await speakText("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
     } catch (error) {
-      console.warn("Voice test failed, bell fallback is enabled:", error);
+      console.warn("Voice test failed:", error);
     }
 
     return true;
   } catch (error) {
+    console.warn("enableNotifySound failed:", error);
+
     unlocked = false;
+
     localStorage.removeItem(SOUND_KEY);
-    console.warn("Audio unlock failed:", error);
+
     return false;
   }
 }
