@@ -8,6 +8,19 @@ function hasWindow() {
   return typeof window !== "undefined";
 }
 
+function getAudioContext() {
+  if (!hasWindow()) return null;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+
+  return audioContext;
+}
+
 function getVoices() {
   if (!hasWindow() || !window.speechSynthesis) return [];
   return window.speechSynthesis.getVoices() || [];
@@ -54,14 +67,28 @@ async function getBestVoice() {
   );
 }
 
-function getAudioContext() {
-  if (!hasWindow()) return null;
+function playIosSafeBeep() {
+  return new Promise((resolve, reject) => {
+    try {
+      const audio = new Audio(
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
+      );
 
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return null;
+      audio.volume = 1;
+      audio.muted = false;
+      audio.playsInline = true;
 
-  if (!audioContext) audioContext = new AudioContextClass();
-  return audioContext;
+      const result = audio.play();
+
+      if (result && result.then) {
+        result.then(() => resolve(true)).catch(reject);
+      } else {
+        resolve(true);
+      }
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 async function unlockAudio() {
@@ -72,37 +99,31 @@ async function unlockAudio() {
       await context.resume();
     }
 
-    // สำคัญสำหรับ iPhone / iPad Safari
     if (hasWindow() && window.speechSynthesis) {
       const utterance = new SpeechSynthesisUtterance(" ");
-
       utterance.volume = 0.01;
       utterance.rate = 1;
       utterance.pitch = 1;
-      utterance.lang = "lo-LA";
 
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     }
 
     unlocked = true;
-
     localStorage.setItem(SOUND_KEY, "1");
 
     return true;
   } catch (error) {
     console.warn("unlockAudio failed:", error);
-
-    unlocked = false;
-
     return false;
   }
 }
 
-function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.22 } = {}) {
+function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.25 } = {}) {
   return new Promise((resolve, reject) => {
     try {
       const context = getAudioContext();
+
       if (!context) {
         if (navigator.vibrate) navigator.vibrate(120);
         resolve(true);
@@ -115,6 +136,7 @@ function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.22 }
 
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(frequency, startAt);
+
       gain.gain.setValueAtTime(0.0001, startAt);
       gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
@@ -124,6 +146,7 @@ function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.22 }
 
       oscillator.start(startAt);
       oscillator.stop(startAt + duration + 0.03);
+
       oscillator.onended = () => resolve(true);
     } catch (error) {
       reject(error);
@@ -141,6 +164,15 @@ async function playNotifyBell() {
 async function speakText(text) {
   if (!text || !hasWindow() || !window.speechSynthesis) {
     throw new Error("Speech synthesis not supported");
+  }
+
+  try {
+    const context = getAudioContext();
+    if (context && context.state === "suspended") {
+      await context.resume();
+    }
+  } catch (error) {
+    console.warn("resume before speak failed:", error);
   }
 
   const voice = await getBestVoice();
@@ -163,6 +195,7 @@ async function speakText(text) {
       utterance.volume = 1;
 
       let finished = false;
+
       const fallbackTimer = window.setTimeout(() => {
         if (finished) return;
         finished = true;
@@ -192,44 +225,45 @@ async function speakText(text) {
 
 export async function enableNotifySound() {
   try {
-    const ok = await unlockAudio();
+    unlocked = true;
 
-    if (!ok) {
-      return false;
+    try {
+      await playIosSafeBeep();
+    } catch (error) {
+      console.warn("iOS audio unlock failed:", error);
     }
 
-    // เล่น bell ก่อน
+    try {
+      await unlockAudio();
+    } catch (error) {
+      console.warn("WebAudio unlock failed:", error);
+    }
+
     try {
       await playNotifyBell();
     } catch (error) {
-      console.warn("Bell failed:", error);
+      console.warn("Bell test failed:", error);
     }
 
-    // รอ iPhone Safari unlock speech
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
-    // ทดสอบเสียงพูด
     try {
       await speakText("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
     } catch (error) {
       console.warn("Voice test failed:", error);
     }
 
+    localStorage.setItem(SOUND_KEY, "1");
     return true;
   } catch (error) {
-    console.warn("enableNotifySound failed:", error);
-
     unlocked = false;
-
     localStorage.removeItem(SOUND_KEY);
-
+    console.warn("Audio unlock failed:", error);
     return false;
   }
 }
 
 export function isNotifySoundEnabled() {
-  // Browser ອະນຸຍາດໃຫ້ມີສຽງຫຼັງຈາກ user ກົດປຸ່ມໃນ tab ນັ້ນເທົ່ານັ້ນ.
-  // Reload / ເຄື່ອງໃໝ່ / browser ໃໝ່ ຕ້ອງກົດເປີດສຽງອີກຄັ້ງ.
   return unlocked;
 }
 
@@ -241,6 +275,12 @@ export async function speakNotify(text) {
   if (!unlocked) return false;
 
   try {
+    await playIosSafeBeep();
+  } catch (error) {
+    console.warn("iOS beep failed:", error);
+  }
+
+  try {
     await playNotifyBell();
   } catch (error) {
     console.warn("Bell notification failed:", error);
@@ -250,7 +290,7 @@ export async function speakNotify(text) {
     await speakText(text);
     return true;
   } catch (error) {
-    console.warn("Voice notification failed, bell was already played:", error);
+    console.warn("Voice notification failed:", error);
     return false;
   }
 }
@@ -268,8 +308,6 @@ function getTableName(payload) {
   );
 }
 
-// ถ้ามีชื่อโต๊ะที่ browser อ่านไม่ตรง ให้เพิ่มตรงนี้ได้เลย
-// ตัวอย่าง: A1: "ເອ ໜຶ່ງ", VIP1: "ວີ ໄອ ພີ ໜຶ່ງ"
 const TABLE_VOICE_OVERRIDES = {
   A1: "ເອ ໜຶ່ງ",
   A2: "ເອ ສອງ",
@@ -380,7 +418,6 @@ function numberVoice(value) {
     return `${tensText} ${DIGIT_VOICE[ones]}`;
   }
 
-  // 100 ขึ้นไปให้อ่านแยกตัวเลข เพื่อให้ TTS ไม่เพี้ยน
   return String(number)
     .split("")
     .map((char) => DIGIT_VOICE[char] || char)
@@ -461,9 +498,7 @@ function getItemQty(item) {
 }
 
 function itemsVoiceText(items) {
-  return items
-    .map((item) => `${getItemName(item)} ${getItemQty(item)}`)
-    .join(", ");
+  return items.map((item) => `${getItemName(item)} ${getItemQty(item)}`).join(", ");
 }
 
 export function orderVoiceText(order) {
