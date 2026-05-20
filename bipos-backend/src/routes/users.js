@@ -110,3 +110,25 @@ userRouter.put('/:id', requireAuth, allowRoles('OWNER', 'ADMIN'), validateBody(u
     res.json(safe);
   } catch (error) { next(error); }
 });
+
+
+userRouter.delete('/:id', requireAuth, allowRoles('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw httpError(404, 'User not found');
+    requireSameRestaurant(existing, req.user);
+
+    if (existing.id === req.user.id) {
+      throw httpError(400, 'Cannot delete your own user while logged in');
+    }
+
+    assertCanUpdateUser(req.user, existing);
+    await ensureActiveOwnerRemains(existing, { status: 'INACTIVE' });
+
+    const user = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'INACTIVE' } });
+    await logAudit(req, { action: 'USER_DELETED', targetType: 'User', targetId: user.id, branchId: user.branchId, metadata: { username: user.username, role: user.role } });
+    const safe = stripPrivateUser(user);
+    emitBranchAndRestaurant(req, { branchId: user.branchId, restaurantId: user.restaurantId }, 'user:changed', { ...safe, deleted: true });
+    res.json({ success: true, user: safe });
+  } catch (error) { next(error); }
+});

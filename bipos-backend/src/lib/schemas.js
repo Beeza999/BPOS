@@ -84,6 +84,7 @@ export const callStaffSchema = z.object({
   tableToken: z.string().trim().min(20),
   tableName: z.string().max(80).optional(),
   message: z.string().max(300).optional(),
+  type: z.enum(['STAFF', 'BILL']).optional().default('STAFF'),
 });
 
 export const categoryCreateSchema = z.object({

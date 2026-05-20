@@ -116,11 +116,15 @@ orderRouter.post('/call-staff', callStaffLimiter, validateBody(callStaffSchema),
     });
     if (!table) throw httpError(400, 'Invalid table token');
 
+    const type = req.body.type === 'BILL' || String(req.body.message || '').includes('ເກັບເງິນ') ? 'BILL' : 'STAFF';
+    const tableName = req.body.tableName || table.name || '';
+
     const notification = {
+      type,
       branchId: table.branchId,
       tableId: table.id,
-      tableName: req.body.tableName || table.name || '',
-      message: req.body.message || 'ລູກຄ້າເອີ້ນພະນັກງານ',
+      tableName,
+      message: req.body.message || (type === 'BILL' ? `ລູກຄ້າໂຕະ ${tableName} ເອີ້ນເກັບເງິນ` : 'ລູກຄ້າເອີ້ນພະນັກງານ'),
       calledAt: new Date().toISOString(),
     };
 

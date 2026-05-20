@@ -55,16 +55,56 @@ function waitForVoices() {
   return voicesReadyPromise;
 }
 
-async function getBestVoice() {
-  const voices = await waitForVoices();
+function isMobileLikeDevice() {
+  if (!hasWindow()) return false;
+
+  const ua = String(navigator.userAgent || "");
+  const platform = String(navigator.platform || "");
+  const userAgentDataMobile = Boolean(navigator.userAgentData?.mobile);
+  const touchPoints = Number(navigator.maxTouchPoints || 0);
 
   return (
-    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("lo")) ||
-    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("th")) ||
-    voices.find((v) => String(v.lang || "").toLowerCase().startsWith("en")) ||
-    voices[0] ||
-    null
+    userAgentDataMobile ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua) ||
+    (platform === "MacIntel" && touchPoints > 1)
   );
+}
+
+export function shouldUseEnglishVoice() {
+  return isMobileLikeDevice();
+}
+
+function voicePreferences() {
+  if (shouldUseEnglishVoice()) return ["en-US", "en-GB", "en", "lo", "th"];
+  return ["lo-LA", "lo", "th-TH", "th", "en-US", "en"];
+}
+
+async function getBestVoice() {
+  const voices = await waitForVoices();
+  const preferences = voicePreferences().map((lang) => lang.toLowerCase());
+
+  for (const lang of preferences) {
+    const exact = voices.find((voice) => String(voice.lang || "").toLowerCase() === lang);
+    if (exact) return exact;
+  }
+
+  for (const lang of preferences) {
+    const prefix = lang.split("-")[0];
+    const partial = voices.find((voice) => String(voice.lang || "").toLowerCase().startsWith(prefix));
+    if (partial) return partial;
+  }
+
+  return voices[0] || null;
+}
+
+function normalizeSpeechText(text) {
+  if (text && typeof text === "object") {
+    return shouldUseEnglishVoice()
+      ? String(text.en || text.lo || "")
+      : String(text.lo || text.en || "");
+  }
+
+  return String(text || "");
 }
 
 function playIosSafeBeep() {
@@ -162,7 +202,9 @@ async function playNotifyBell() {
 }
 
 async function speakText(text) {
-  if (!text || !hasWindow() || !window.speechSynthesis) {
+  const speechText = normalizeSpeechText(text);
+
+  if (!speechText || !hasWindow() || !window.speechSynthesis) {
     throw new Error("Speech synthesis not supported");
   }
 
@@ -181,16 +223,16 @@ async function speakText(text) {
     try {
       window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(String(text));
+      const utterance = new SpeechSynthesisUtterance(speechText);
 
       if (voice) {
         utterance.voice = voice;
-        utterance.lang = voice.lang || "lo-LA";
+        utterance.lang = voice.lang || (shouldUseEnglishVoice() ? "en-US" : "lo-LA");
       } else {
-        utterance.lang = "lo-LA";
+        utterance.lang = shouldUseEnglishVoice() ? "en-US" : "lo-LA";
       }
 
-      utterance.rate = 0.86;
+      utterance.rate = shouldUseEnglishVoice() ? 0.92 : 0.86;
       utterance.pitch = 1;
       utterance.volume = 1;
 
@@ -248,7 +290,7 @@ export async function enableNotifySound() {
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     try {
-      await speakText("ເປີດສຽງແຈ້ງເຕືອນແລ້ວ");
+      await speakText({ lo: "ເປີດສຽງແຈ້ງເຕືອນແລ້ວ", en: "Notification sound enabled" });
     } catch (error) {
       console.warn("Voice test failed:", error);
     }
@@ -347,6 +389,42 @@ const TABLE_VOICE_OVERRIDES = {
   VIP3: "ວີ ໄອ ພີ ສາມ",
 };
 
+const TABLE_VOICE_OVERRIDES_EN = {
+  A1: "A one",
+  A2: "A two",
+  A3: "A three",
+  A4: "A four",
+  A5: "A five",
+  A6: "A six",
+  A7: "A seven",
+  A8: "A eight",
+  A9: "A nine",
+  A10: "A ten",
+  B1: "B one",
+  B2: "B two",
+  B3: "B three",
+  B4: "B four",
+  B5: "B five",
+  B6: "B six",
+  B7: "B seven",
+  B8: "B eight",
+  B9: "B nine",
+  B10: "B ten",
+  C1: "C one",
+  C2: "C two",
+  C3: "C three",
+  C4: "C four",
+  C5: "C five",
+  C6: "C six",
+  C7: "C seven",
+  C8: "C eight",
+  C9: "C nine",
+  C10: "C ten",
+  VIP1: "V I P one",
+  VIP2: "V I P two",
+  VIP3: "V I P three",
+};
+
 const LETTER_VOICE = {
   A: "ເອ",
   B: "ບີ",
@@ -389,6 +467,43 @@ const DIGIT_VOICE = {
   9: "ເກົ້າ",
 };
 
+const DIGIT_VOICE_EN = {
+  0: "zero",
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+};
+
+const SMALL_NUMBER_EN = {
+  0: "zero",
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+  10: "ten",
+  11: "eleven",
+  12: "twelve",
+  13: "thirteen",
+  14: "fourteen",
+  15: "fifteen",
+  16: "sixteen",
+  17: "seventeen",
+  18: "eighteen",
+  19: "nineteen",
+  20: "twenty",
+};
+
 function numberVoice(value) {
   const number = Number.parseInt(String(value || "0"), 10);
 
@@ -424,22 +539,58 @@ function numberVoice(value) {
     .join(" ");
 }
 
-function tableVoiceName(tableName) {
-  const raw = String(tableName || "-").trim();
-  if (!raw || raw === "-") return "-";
+function numberVoiceEn(value) {
+  const number = Number.parseInt(String(value || "0"), 10);
 
-  const clean = raw
+  if (!Number.isFinite(number)) {
+    return String(value || "")
+      .split("")
+      .map((char) => DIGIT_VOICE_EN[char] || char)
+      .join(" ");
+  }
+
+  if (SMALL_NUMBER_EN[number]) return SMALL_NUMBER_EN[number];
+
+  if (number > 20 && number < 100) {
+    const tensNames = {
+      2: "twenty",
+      3: "thirty",
+      4: "forty",
+      5: "fifty",
+      6: "sixty",
+      7: "seventy",
+      8: "eighty",
+      9: "ninety",
+    };
+    const tens = Math.floor(number / 10);
+    const ones = number % 10;
+    return ones ? `${tensNames[tens]} ${DIGIT_VOICE_EN[ones]}` : tensNames[tens];
+  }
+
+  return String(number)
+    .split("")
+    .map((char) => DIGIT_VOICE_EN[char] || char)
+    .join(" ");
+}
+
+function cleanTableName(tableName) {
+  return String(tableName || "-")
+    .trim()
     .replace(/^ໂຕະ\s*/i, "")
     .replace(/^โต๊ะ\s*/i, "")
     .replace(/^table\s*/i, "")
     .replace(/[\s_-]+/g, "")
     .toUpperCase();
+}
 
+function tableVoiceName(tableName) {
+  const raw = String(tableName || "-").trim();
+  if (!raw || raw === "-") return "-";
+
+  const clean = cleanTableName(raw);
   if (!clean) return raw;
 
-  if (TABLE_VOICE_OVERRIDES[clean]) {
-    return TABLE_VOICE_OVERRIDES[clean];
-  }
+  if (TABLE_VOICE_OVERRIDES[clean]) return TABLE_VOICE_OVERRIDES[clean];
 
   const match = clean.match(/^([A-Z]+)(\d+)$/);
   if (match) {
@@ -451,9 +602,7 @@ function tableVoiceName(tableName) {
     return `${letters} ${numbers}`;
   }
 
-  if (/^\d+$/.test(clean)) {
-    return numberVoice(clean);
-  }
+  if (/^\d+$/.test(clean)) return numberVoice(clean);
 
   return clean
     .split("")
@@ -465,8 +614,37 @@ function tableVoiceName(tableName) {
     .join(" ");
 }
 
+function tableVoiceNameEn(tableName) {
+  const raw = String(tableName || "-").trim();
+  if (!raw || raw === "-") return "unknown";
+
+  const clean = cleanTableName(raw);
+  if (!clean) return raw;
+
+  if (TABLE_VOICE_OVERRIDES_EN[clean]) return TABLE_VOICE_OVERRIDES_EN[clean];
+
+  const match = clean.match(/^([A-Z]+)(\d+)$/);
+  if (match) {
+    const letters = match[1].split("").join(" ");
+    const numbers = numberVoiceEn(match[2]);
+    return `${letters} ${numbers}`;
+  }
+
+  if (/^\d+$/.test(clean)) return numberVoiceEn(clean);
+
+  return clean
+    .split("")
+    .map((char) => {
+      if (/[A-Z]/.test(char)) return char;
+      if (DIGIT_VOICE_EN[char]) return DIGIT_VOICE_EN[char];
+      return char;
+    })
+    .join(" ");
+}
+
 function getTableVoiceName(payload) {
-  return tableVoiceName(getTableName(payload));
+  const tableName = getTableName(payload);
+  return shouldUseEnglishVoice() ? tableVoiceNameEn(tableName) : tableVoiceName(tableName);
 }
 
 function getItems(payload) {
@@ -494,38 +672,80 @@ function getItemName(item) {
 }
 
 function getItemQty(item) {
-  return item?.quantity || item?.qty || 1;
+  return Number(item?.quantity || item?.qty || 1);
 }
 
 function itemsVoiceText(items) {
   return items.map((item) => `${getItemName(item)} ${getItemQty(item)}`).join(", ");
 }
 
+function itemsVoiceTextEn(items) {
+  const totalQty = items.reduce((sum, item) => sum + getItemQty(item), 0);
+  if (totalQty <= 0) return "";
+  return `${numberVoiceEn(totalQty)} ${totalQty === 1 ? "item" : "items"}`;
+}
+
+export function isBillCall(payload) {
+  const type = String(payload?.type || payload?.callType || "").toUpperCase();
+  const message = String(payload?.message || "").toLowerCase();
+
+  return (
+    type === "BILL" ||
+    type === "PAYMENT" ||
+    message.includes("ເກັບເງິນ") ||
+    message.includes("ຂໍເກັບເງິນ") ||
+    message.includes("pay") ||
+    message.includes("bill") ||
+    message.includes("cashier")
+  );
+}
+
 export function orderVoiceText(order) {
   const tableName = getTableVoiceName(order);
   const items = getItems(order);
-  const itemText = itemsVoiceText(items);
 
-  if (!itemText) {
-    return `ອໍເດີໃໝ່ ໂຕະ ${tableName}`;
+  if (shouldUseEnglishVoice()) {
+    const itemText = itemsVoiceTextEn(items);
+    return itemText ? `New order, table ${tableName}, ${itemText}` : `New order, table ${tableName}`;
   }
 
+  const itemText = itemsVoiceText(items);
+  if (!itemText) return `ອໍເດີໃໝ່ ໂຕະ ${tableName}`;
   return `ອໍເດີໃໝ່ ໂຕະ ${tableName} ${itemText}`;
 }
 
 export function readyServeVoiceText(payload) {
   const tableName = getTableVoiceName(payload);
   const items = getItems(payload);
-  const itemText = itemsVoiceText(items);
 
-  if (!itemText) {
-    return `ໂຕະ ${tableName} ພ້ອມເສີບ`;
+  if (shouldUseEnglishVoice()) {
+    const itemText = itemsVoiceTextEn(items);
+    return itemText ? `Table ${tableName} ready to serve, ${itemText}` : `Table ${tableName} ready to serve`;
   }
 
+  const itemText = itemsVoiceText(items);
+  if (!itemText) return `ໂຕະ ${tableName} ພ້ອມເສີບ`;
   return `ໂຕະ ${tableName} ພ້ອມເສີບ ${itemText}`;
 }
 
-export function staffCallVoiceText(payload) {
+export function billCallVoiceText(payload) {
   const tableName = getTableVoiceName(payload);
+
+  if (shouldUseEnglishVoice()) {
+    return `Customer at table ${tableName} wants to pay`;
+  }
+
+  return `ລູກຄ້າໂຕະ ${tableName} ເອີ້ນເກັບເງິນ`;
+}
+
+export function staffCallVoiceText(payload) {
+  if (isBillCall(payload)) return billCallVoiceText(payload);
+
+  const tableName = getTableVoiceName(payload);
+
+  if (shouldUseEnglishVoice()) {
+    return `Customer at table ${tableName} calls staff`;
+  }
+
   return `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`;
 }

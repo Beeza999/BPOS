@@ -6,6 +6,8 @@ import {
   speakNotify,
   readyServeVoiceText,
   staffCallVoiceText,
+  billCallVoiceText,
+  isBillCall,
 } from "../../lib/notifySound.js";
 import { useRealtimeReload } from "../../hooks/useRealtimeReload.js";
 import { REALTIME_EVENT } from "../../lib/socket.js";
@@ -392,14 +394,15 @@ function addCashierAlert(alert) {
   const payload = event.detail?.payload || {};
 
   if (eventName === "staff:call") {
-    const speech = staffCallVoiceText(payload);
     const tableName = tableNameFromPayload(payload);
+    const billCall = isBillCall(payload);
+    const speech = billCall ? billCallVoiceText(payload) : staffCallVoiceText(payload);
 
     addCashierAlert({
-      id: `staff-${payload.tableId || payload.tableToken || "table"}-${payload.calledAt || Date.now()}`,
-      type: "staff",
-      title: `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
-      message: "ລູກຄ້າຕ້ອງການພະນັກງານ",
+      id: `${billCall ? "bill" : "staff"}-${payload.tableId || payload.tableToken || "table"}-${payload.calledAt || Date.now()}`,
+      type: billCall ? "bill" : "staff",
+      title: billCall ? `ໂຕະ ${tableName} ເອີ້ນເກັບເງິນ` : `ໂຕະ ${tableName} ເອີ້ນພະນັກງານ`,
+      message: billCall ? "ລູກຄ້າຕ້ອງການຊຳລະເງິນ" : "ລູກຄ້າຕ້ອງການພະນັກງານ",
       speech,
     });
   }
@@ -737,7 +740,7 @@ function addCashierAlert(alert) {
           {soundEnabled ? "ເປີດສຽງແລ້ວ" : "ເປີດສຽງແຈ້ງເຕືອນ"}
         </button>
         <p className="text-xs font-semibold text-slate-500">
-          ສຽງແຈ້ງເຕືອນຈະດັງເມື່ອລູກຄ້າເອີ້ນ ຫຼື ຫ້ອງຄົວກົດພ້ອມເສີບ
+          ສຽງແຈ້ງເຕືອນຈະດັງເມື່ອລູກຄ້າເອີ້ນພະນັກງານ, ເອີ້ນເກັບເງິນ ຫຼື ຫ້ອງຄົວກົດພ້ອມເສີບ
         </p>
       </section>
 
@@ -749,7 +752,9 @@ function addCashierAlert(alert) {
               className={
                 alert.type === "ready"
                   ? "rounded-3xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"
-                  : "rounded-3xl border border-orange-200 bg-orange-50 p-4 shadow-sm"
+                  : alert.type === "bill"
+                    ? "rounded-3xl border border-sky-200 bg-sky-50 p-4 shadow-sm"
+                    : "rounded-3xl border border-orange-200 bg-orange-50 p-4 shadow-sm"
               }
             >
               <div className="flex items-start justify-between gap-3">

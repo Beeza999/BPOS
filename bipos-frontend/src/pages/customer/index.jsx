@@ -277,12 +277,18 @@ export default function Customer() {
     }
   }
 
-  async function callStaff(message = 'ລູກຄ້າເອີ້ນພະນັກງານ') {
+  async function callStaff(type = 'STAFF') {
+    const normalizedType = type === 'BILL' ? 'BILL' : 'STAFF';
+    const message = normalizedType === 'BILL'
+      ? `ລູກຄ້າໂຕະ ${table?.name || ''} ເອີ້ນເກັບເງິນ`
+      : 'ລູກຄ້າເອີ້ນພະນັກງານ';
+
     await api('/api/orders/call-staff', {
       method: 'POST',
-      body: { tableToken, tableName: table?.name || '', message },
+      body: { tableToken, tableName: table?.name || '', message, type: normalizedType },
     }).catch(() => null);
-    alert(message === 'ລູກຄ້າຂໍເກັບເງິນ' ? 'ເອີ້ນເກັບເງິນແລ້ວ' : 'ເອີ້ນພະນັກງານແລ້ວ');
+
+    alert(normalizedType === 'BILL' ? 'ເອີ້ນເກັບເງິນແລ້ວ' : 'ເອີ້ນພະນັກງານແລ້ວ');
   }
 
   const tableName = table?.name || '...';
@@ -338,7 +344,7 @@ export default function Customer() {
             </div>
 
             <div className="mt-6 grid grid-cols-3 gap-3">
-              <button type="button" onClick={() => callStaff('ລູກຄ້າຂໍເກັບເງິນ')} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-orange-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
+              <button type="button" onClick={() => callStaff('BILL')} className="min-h-[128px] rounded-3xl bg-gradient-to-br from-white to-orange-50 p-3 text-left shadow-sm ring-1 ring-slate-100 active:scale-95">
                 <p className="text-base font-black text-slate-800">ເກັບເງິນ</p>
                 <div className="mt-5 text-5xl">💳</div>
               </button>

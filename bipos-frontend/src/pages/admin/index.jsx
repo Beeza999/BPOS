@@ -57,9 +57,11 @@ export default function Admin() {
     username: "",
     pin: "",
     role: "WAITER",
+    status: "ACTIVE",
     restaurantId: "",
     branchId: "",
   });
+  const [editingUserId, setEditingUserId] = useState(null);
 
   async function loginAdmin(e) {
     e.preventDefault();
@@ -245,16 +247,81 @@ export default function Admin() {
     await load();
   }
 
-  async function addUser(e) {
+  function resetUserForm() {
+    setEditingUserId(null);
+    setUser({
+      name: "",
+      username: "",
+      pin: "",
+      role: "WAITER",
+      status: "ACTIVE",
+      restaurantId: user.restaurantId || cats[0]?.restaurantId || "",
+      branchId: user.branchId || tables[0]?.branchId || cats[0]?.branchId || "",
+    });
+  }
+
+  async function saveUser(e) {
     e.preventDefault();
 
-    await api("/api/users", {
-      method: "POST",
-      body: user,
+    try {
+      if (editingUserId) {
+        const body = {
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          status: user.status || "ACTIVE",
+          branchId: user.role === "OWNER" ? null : user.branchId || null,
+        };
+
+        if (user.pin) body.pin = user.pin;
+
+        await api("/api/users/" + editingUserId, {
+          method: "PUT",
+          body,
+        });
+      } else {
+        await api("/api/users", {
+          method: "POST",
+          body: {
+            ...user,
+            status: user.status || "ACTIVE",
+            branchId: user.role === "OWNER" ? null : user.branchId || null,
+          },
+        });
+      }
+
+      resetUserForm();
+      await load();
+    } catch (error) {
+      alert(error.message || "ບັນທຶກຜູ້ໃຊ້ບໍ່ສຳເລັດ");
+    }
+  }
+
+  function editUser(item) {
+    setEditingUserId(item.id);
+    setUser({
+      name: item.name || "",
+      username: item.username || "",
+      pin: "",
+      role: item.role || "WAITER",
+      status: item.status || "ACTIVE",
+      restaurantId: item.restaurantId || user.restaurantId || "",
+      branchId: item.branchId || user.branchId || tables[0]?.branchId || cats[0]?.branchId || "",
     });
 
-    setUser({ ...user, name: "", username: "", pin: "" });
-    await load();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function deleteUser(id) {
+    if (!confirm("ຢືນຢັນລົບຜູ້ໃຊ້?")) return;
+
+    try {
+      await api("/api/users/" + id, { method: "DELETE" });
+      if (editingUserId === id) resetUserForm();
+      await load();
+    } catch (error) {
+      alert(error.message || "ລົບຜູ້ໃຊ້ບໍ່ສຳເລັດ");
+    }
   }
 
   async function toggleMenu(item) {
@@ -437,7 +504,13 @@ export default function Admin() {
           user={user}
           setUser={setUser}
           users={users}
-          addUser={addUser}
+          saveUser={saveUser}
+          editingUserId={editingUserId}
+          editUser={editUser}
+          cancelEditUser={resetUserForm}
+          deleteUser={deleteUser}
+          currentUser={adminAuth.user}
+          tables={tables}
         />
       )}
 
