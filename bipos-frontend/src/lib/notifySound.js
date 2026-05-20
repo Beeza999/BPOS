@@ -746,6 +746,12 @@ const MENU_VOICE_OVERRIDES = {
   "ໄຂ່ດາວ": { lo: "ໄຂ່ ດາວ", en: "fried egg" },
 
   // กะเพรา / basil
+  // เมนูรวมที่เจอบ่อย ให้ iPhone/iPad อ่านชัด ไม่อ่านภาษาลาวปนอังกฤษ
+  "ເຂົ້າກະເພົາໄກ່ໄຂ່ດາວ": { lo: "ເຂົ້າ ກະ ເພົາ ໄກ່ ໄຂ່ ດາວ", en: "chicken basil rice with fried egg" },
+  "ເຂົ້າກະເພົາໝູໄຂ່ດາວ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ ໄຂ່ ດາວ", en: "pork basil rice with fried egg" },
+  "ເຂົ້າກະເພົາຫມູໄຂ່ດາວ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ ໄຂ່ ດາວ", en: "pork basil rice with fried egg" },
+  "ເຂົ້າກະເພົາເນື້ອໄຂ່ດາວ": { lo: "ເຂົ້າ ກະ ເພົາ ເນື້ອ ໄຂ່ ດາວ", en: "beef basil rice with fried egg" },
+
   "ເຂົ້າກະເພົາໄກ່": { lo: "ເຂົ້າ ກະ ເພົາ ໄກ່", en: "rice with chicken basil" },
   "ເຂົ້າກະເພົາໝູ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ", en: "rice with pork basil" },
   "ເຂົ້າກະເພົາຫມູ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ", en: "rice with pork basil" },
@@ -796,6 +802,10 @@ const MENU_VOICE_OVERRIDES = {
   "ນໍ້າສົ້ມ": { lo: "ນ້ຳ ສົ້ມ", en: "orange juice" },
   "ນ້ຳຫວານ": { lo: "ນ້ຳ ຫວານ", en: "sweet drink" },
   "ນ້ຳກ້ອນ": { lo: "ນ້ຳ ກ້ອນ", en: "ice" },
+  "ນ້ຳໝາກນາວ": { lo: "ນ້ຳ ໝາກ ນາວ", en: "lime juice" },
+  "ນໍ້າໝາກນາວ": { lo: "ນ້ຳ ໝາກ ນາວ", en: "lime juice" },
+  "ນ້ຳຫມາກນາວ": { lo: "ນ້ຳ ໝາກ ນາວ", en: "lime juice" },
+  "ນໍ້າຫມາກນາວ": { lo: "ນ້ຳ ໝາກ ນາວ", en: "lime juice" },
   "ກາເຟ": { lo: "ກາ ເຟ", en: "coffee" },
   "ກາເຟເຢັນ": { lo: "ກາ ເຟ ເຢັນ", en: "iced coffee" },
   "ຊາເຢັນ": { lo: "ຊາ ເຢັນ", en: "iced tea" },
@@ -803,28 +813,37 @@ const MENU_VOICE_OVERRIDES = {
   "ໂຄກ": { lo: "ໂຄກ", en: "coke" },
   "ເປບຊີ": { lo: "ເປບ ຊີ", en: "pepsi" },
   "ສະໄປ": { lo: "ສະ ໄປ", en: "sprite" },
+  "ເຄັກຊັອກໂກແລັດ": { lo: "ເຄັກ ຊັອກ ໂກ ແລັດ", en: "chocolate cake" },
+  "ໄອສະກຣີມ": { lo: "ໄອ ສະ ກຣີມ", en: "ice cream" },
 };
 
 const MENU_WORD_EN = [
   [/(ເຂົ້າ|ข้าว)/g, "rice"],
+  [/(ກະເພົາ|ກະເພາະ|กะเพรา|กระเพรา)/g, "basil"],
   [/(ຜັດ|ผัด)/g, "fried"],
   [/(ໄກ່|ไก่)/g, "chicken"],
   [/(ໝູ|ຫມູ|หมู)/g, "pork"],
   [/(ເນື້ອ|เนื้อ)/g, "beef"],
   [/(ກຸ້ງ|กุ้ง)/g, "shrimp"],
   [/(ປາ|ปลา)/g, "fish"],
+  [/(ໄຂ່ດາວ|ไข่ดาว)/g, "fried egg"],
+  [/(ໄຂ່ຈຽວ|ไข่เจียว)/g, "omelet"],
   [/(ໄຂ່|ไข่)/g, "egg"],
   [/(ຕຳ|ตำ)/g, "papaya salad"],
   [/(ໝາກຫຸ່ງ|ຫມາກຫຸ່ງ|มะละกอ)/g, "papaya"],
   [/(ລາບ|ลาบ)/g, "larb"],
-  [/(ເຝີ|ก๋วยเตี๋ยว|ก้วยเตี๋ยว)/g, "noodle soup"],
+  [/(ເຝີ|ກ້ວຍຕຽວ|ก๋วยเตี๋ยว|ก้วยเตี๋ยว)/g, "noodle soup"],
   [/(ນ້ຳ|ນໍ້າ|น้ำ)/g, "drink"],
+  [/(ໝາກນາວ|ຫມາກນາວ|มะนาว)/g, "lime"],
   [/(ສົ້ມ|ส้ม)/g, "orange"],
   [/(ກາເຟ|กาแฟ)/g, "coffee"],
   [/(ຊາ|ชา)/g, "tea"],
   [/(ເຢັນ|เย็น)/g, "iced"],
   [/(ທອດ|ทอด)/g, "fried"],
   [/(ປີ້ງ|ย่าง|ปิ้ง)/g, "grilled"],
+  [/(ເຄັກ|เค้ก)/g, "cake"],
+  [/(ຊັອກໂກແລັດ|ช็อกโกแลต)/g, "chocolate"],
+  [/(ໄອສະກຣີມ|ไอศกรีม|ไอติม)/g, "ice cream"],
 ];
 
 const MENU_WORD_LO = [
@@ -862,18 +881,27 @@ function cleanVoiceText(value) {
 
 function menuFallbackEn(name) {
   let text = String(name || "");
+  const recognized = [];
 
   for (const [pattern, replacement] of MENU_WORD_EN) {
-    text = text.replace(pattern, ` ${replacement} `);
+    const matched = text.match(pattern);
+    if (matched) {
+      recognized.push(replacement);
+      text = text.replace(pattern, " ");
+    }
   }
 
-  text = cleanVoiceText(text);
+  const remainingEnglish = cleanVoiceText(
+    text
+      .replace(/[\u0E80-\u0EFF\u0E00-\u0E7F]+/g, " ")
+      .replace(/[^a-zA-Z0-9 ]+/g, " ")
+  );
 
-  if (!text || hasLaoOrThaiText(text)) {
-    return "menu item";
-  }
+  const result = cleanVoiceText([...recognized, remainingEnglish].filter(Boolean).join(" "));
 
-  return text;
+  if (!result) return "menu item";
+
+  return result;
 }
 
 function menuFallbackLo(name) {
