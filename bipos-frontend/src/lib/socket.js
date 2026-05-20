@@ -21,6 +21,7 @@ export const GLOBAL_REALTIME_EVENTS = [
   'menu:changed',
   'category:changed',
   'table:changed',
+  'table:status',
   'user:changed',
   'staff:call',
 ];

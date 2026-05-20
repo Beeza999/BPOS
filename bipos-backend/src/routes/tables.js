@@ -20,6 +20,7 @@ function withQrInfo(table) {
 tableRouter.get('/', optionalAuth, async (req, res, next) => {
   try {
     let where = {};
+
     if (req.query.branchId) {
       if (req.user) await ensureBranchBelongsToUser(req.query.branchId, req.user);
       where = { branchId: String(req.query.branchId) };
@@ -28,9 +29,76 @@ tableRouter.get('/', optionalAuth, async (req, res, next) => {
     } else {
       throw httpError(400, 'branchId is required');
     }
-    const tables = await prisma.table.findMany({ where, orderBy: { name: 'asc' }, include: { branch: true } });
-    res.json(tables.map(withQrInfo));
-  } catch (error) { next(error); }
+
+    const tables = await prisma.table.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      include: { branch: true },
+    });
+
+    const tableIds = tables.map((table) => table.id);
+
+    const activeOrders = tableIds.length
+      ? await prisma.order.findMany({
+          where: {
+            tableId: { in: tableIds },
+            status: { notIn: ['SERVED', 'CANCELLED'] },
+          },
+          include: {
+            items: true,
+          },
+        })
+      : [];
+
+    const ordersByTable = new Map();
+
+    for (const order of activeOrders) {
+      const list = ordersByTable.get(order.tableId) || [];
+      list.push(order);
+      ordersByTable.set(order.tableId, list);
+    }
+
+    const fixedTables = tables.map((table) => {
+      const orders = ordersByTable.get(table.id) || [];
+
+      let nextStatus = 'AVAILABLE';
+
+      if (orders.length > 0) {
+        const items = orders.flatMap((order) =>
+          (order.items || []).filter((item) => item.status !== 'CANCELLED')
+        );
+
+        const allReady =
+          items.length > 0 &&
+          items.every((item) => ['READY', 'SERVED'].includes(String(item.status).toUpperCase()));
+
+        nextStatus = allReady ? 'BILLING' : 'OPEN';
+      }
+
+      return {
+        ...table,
+        status: nextStatus,
+      };
+    });
+
+    const staleTables = fixedTables.filter((table) => {
+      const original = tables.find((item) => item.id === table.id);
+      return original && original.status !== table.status;
+    });
+
+    await Promise.all(
+      staleTables.map((table) =>
+        prisma.table.update({
+          where: { id: table.id },
+          data: { status: table.status },
+        }).catch(() => null)
+      )
+    );
+
+    res.json(fixedTables.map(withQrInfo));
+  } catch (error) {
+    next(error);
+  }
 });
 
 tableRouter.get('/session/:token', async (req, res, next) => {
