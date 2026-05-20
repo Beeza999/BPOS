@@ -190,7 +190,7 @@ function speakDirect(text, options = {}) {
         utterance.lang = useEnglish ? "en-US" : "lo-LA";
       }
 
-      utterance.rate = useEnglish ? 0.9 : 0.86;
+      utterance.rate = useEnglish ? 0.82 : 0.82;
       utterance.pitch = 1;
       utterance.volume = typeof options.volume === "number" ? options.volume : 1;
 
@@ -691,14 +691,233 @@ function getItemQty(item) {
   return Number(item?.quantity || item?.qty || 1);
 }
 
+function normalizeMenuKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_.,/()]+/g, "")
+    .replace(/ໍ/g, "")
+    .replace(/ຫມ/g, "ໝ")
+    .replace(/หม/g, "หม");
+}
+
+function getCustomMenuVoice(item, lang) {
+  if (!item || typeof item !== "object") return "";
+
+  const sources = [
+    item,
+    item.menuItem,
+    item.menu,
+    item.item,
+  ].filter(Boolean);
+
+  for (const source of sources) {
+    const value =
+      lang === "en"
+        ? source.voiceEn ||
+          source.voiceEnglish ||
+          source.speechEn ||
+          source.nameEn ||
+          source.englishName ||
+          source.enName
+        : source.voiceLo ||
+          source.voiceLao ||
+          source.speechLo ||
+          source.laoName;
+
+    if (value) return String(value).trim();
+  }
+
+  return "";
+}
+
+const MENU_VOICE_OVERRIDES = {
+  // ข้าว / rice
+  "ເຂົ້າຜັດ": { lo: "ເຂົ້າ ຜັດ", en: "fried rice" },
+  "ເຂົ້າຜັດໄກ່": { lo: "ເຂົ້າ ຜັດ ໄກ່", en: "chicken fried rice" },
+  "ເຂົ້າຜັດຫມູ": { lo: "ເຂົ້າ ຜັດ ໝູ", en: "pork fried rice" },
+  "ເຂົ້າຜັດໝູ": { lo: "ເຂົ້າ ຜັດ ໝູ", en: "pork fried rice" },
+  "ເຂົ້າຜັດເນື້ອ": { lo: "ເຂົ້າ ຜັດ ເນື້ອ", en: "beef fried rice" },
+  "ເຂົ້າຜັດກຸ້ງ": { lo: "ເຂົ້າ ຜັດ ກຸ້ງ", en: "shrimp fried rice" },
+  "ເຂົ້າຜັດທະເລ": { lo: "ເຂົ້າ ຜັດ ທະ ເລ", en: "seafood fried rice" },
+  "ເຂົ້າຜັດໄຂ່": { lo: "ເຂົ້າ ຜັດ ໄຂ່", en: "egg fried rice" },
+  "ເຂົ້າໄຂ່ຈຽວ": { lo: "ເຂົ້າ ໄຂ່ ຈຽວ", en: "rice with omelet" },
+  "ໄຂ່ຈຽວ": { lo: "ໄຂ່ ຈຽວ", en: "omelet" },
+  "ໄຂ່ດາວ": { lo: "ໄຂ່ ດາວ", en: "fried egg" },
+
+  // กะเพรา / basil
+  "ເຂົ້າກະເພົາໄກ່": { lo: "ເຂົ້າ ກະ ເພົາ ໄກ່", en: "rice with chicken basil" },
+  "ເຂົ້າກະເພົາໝູ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ", en: "rice with pork basil" },
+  "ເຂົ້າກະເພົາຫມູ": { lo: "ເຂົ້າ ກະ ເພົາ ໝູ", en: "rice with pork basil" },
+  "ເຂົ້າກະເພົາເນື້ອ": { lo: "ເຂົ້າ ກະ ເພົາ ເນື້ອ", en: "rice with beef basil" },
+  "ຜັດກະເພົາໄກ່": { lo: "ຜັດ ກະ ເພົາ ໄກ່", en: "chicken basil stir fry" },
+  "ຜັດກະເພົາໝູ": { lo: "ຜັດ ກະ ເພົາ ໝູ", en: "pork basil stir fry" },
+  "ຜັດກະເພົາຫມູ": { lo: "ຜັດ ກະ ເພົາ ໝູ", en: "pork basil stir fry" },
+  "ຜັດກະເພົາເນື້ອ": { lo: "ຜັດ ກະ ເພົາ ເນື້ອ", en: "beef basil stir fry" },
+
+  // Noodles / soup
+  "ເຝີ": { lo: "ເຝີ", en: "noodle soup" },
+  "ເຝີໄກ່": { lo: "ເຝີ ໄກ່", en: "chicken noodle soup" },
+  "ເຝີໝູ": { lo: "ເຝີ ໝູ", en: "pork noodle soup" },
+  "ເຝີຫມູ": { lo: "ເຝີ ໝູ", en: "pork noodle soup" },
+  "ເຝີເນື້ອ": { lo: "ເຝີ ເນື້ອ", en: "beef noodle soup" },
+  "ກ້ວຍຕຽວ": { lo: "ກ້ວຍ ຕຽວ", en: "noodle soup" },
+  "ກ້ວຍຕຽວໄກ່": { lo: "ກ້ວຍ ຕຽວ ໄກ່", en: "chicken noodle soup" },
+  "ກ້ວຍຕຽວໝູ": { lo: "ກ້ວຍ ຕຽວ ໝູ", en: "pork noodle soup" },
+  "ກ້ວຍຕຽວຫມູ": { lo: "ກ້ວຍ ຕຽວ ໝູ", en: "pork noodle soup" },
+  "ກ້ວຍຕຽວເນື້ອ": { lo: "ກ້ວຍ ຕຽວ ເນື້ອ", en: "beef noodle soup" },
+  "ຜັດຊີອິ້ວ": { lo: "ຜັດ ຊີ ອິ້ວ", en: "stir fried soy sauce noodles" },
+  "ຜັດໄທ": { lo: "ຜັດ ໄທ", en: "pad thai" },
+
+  // Lao / Thai dishes
+  "ຕຳໝາກຫຸ່ງ": { lo: "ຕຳ ໝາກ ຫຸ່ງ", en: "papaya salad" },
+  "ຕຳຫມາກຫຸ່ງ": { lo: "ຕຳ ໝາກ ຫຸ່ງ", en: "papaya salad" },
+  "ຕຳລາວ": { lo: "ຕຳ ລາວ", en: "lao papaya salad" },
+  "ຕຳໄທ": { lo: "ຕຳ ໄທ", en: "thai papaya salad" },
+  "ລາບໄກ່": { lo: "ລາບ ໄກ່", en: "chicken larb" },
+  "ລາບໝູ": { lo: "ລາບ ໝູ", en: "pork larb" },
+  "ລາບຫມູ": { lo: "ລາບ ໝູ", en: "pork larb" },
+  "ລາບເນື້ອ": { lo: "ລາບ ເນື້ອ", en: "beef larb" },
+  "ລາບປາ": { lo: "ລາບ ປາ", en: "fish larb" },
+  "ຕົ້ມຍຳກຸ້ງ": { lo: "ຕົ້ມ ຍຳ ກຸ້ງ", en: "tom yum shrimp soup" },
+  "ຕົ້ມແຊບ": { lo: "ຕົ້ມ ແຊບ", en: "spicy soup" },
+  "ແກງຈືດ": { lo: "ແກງ ຈືດ", en: "clear soup" },
+  "ປີ້ງໄກ່": { lo: "ປີ້ງ ໄກ່", en: "grilled chicken" },
+  "ໄກ່ທອດ": { lo: "ໄກ່ ທອດ", en: "fried chicken" },
+  "ໝູທອດ": { lo: "ໝູ ທອດ", en: "fried pork" },
+  "ຫມູທອດ": { lo: "ໝູ ທອດ", en: "fried pork" },
+  "ເນື້ອທອດ": { lo: "ເນື້ອ ທອດ", en: "fried beef" },
+
+  // Drinks
+  "ນ້ຳເປົ່າ": { lo: "ນ້ຳ ເປົ່າ", en: "water" },
+  "ນໍ້າເປົ່າ": { lo: "ນ້ຳ ເປົ່າ", en: "water" },
+  "ນ້ຳດື່ມ": { lo: "ນ້ຳ ດື່ມ", en: "water" },
+  "ນ້ຳສົ້ມ": { lo: "ນ້ຳ ສົ້ມ", en: "orange juice" },
+  "ນໍ້າສົ້ມ": { lo: "ນ້ຳ ສົ້ມ", en: "orange juice" },
+  "ນ້ຳຫວານ": { lo: "ນ້ຳ ຫວານ", en: "sweet drink" },
+  "ນ້ຳກ້ອນ": { lo: "ນ້ຳ ກ້ອນ", en: "ice" },
+  "ກາເຟ": { lo: "ກາ ເຟ", en: "coffee" },
+  "ກາເຟເຢັນ": { lo: "ກາ ເຟ ເຢັນ", en: "iced coffee" },
+  "ຊາເຢັນ": { lo: "ຊາ ເຢັນ", en: "iced tea" },
+  "ຊາຂຽວ": { lo: "ຊາ ຂຽວ", en: "green tea" },
+  "ໂຄກ": { lo: "ໂຄກ", en: "coke" },
+  "ເປບຊີ": { lo: "ເປບ ຊີ", en: "pepsi" },
+  "ສະໄປ": { lo: "ສະ ໄປ", en: "sprite" },
+};
+
+const MENU_WORD_EN = [
+  [/(ເຂົ້າ|ข้าว)/g, "rice"],
+  [/(ຜັດ|ผัด)/g, "fried"],
+  [/(ໄກ່|ไก่)/g, "chicken"],
+  [/(ໝູ|ຫມູ|หมู)/g, "pork"],
+  [/(ເນື້ອ|เนื้อ)/g, "beef"],
+  [/(ກຸ້ງ|กุ้ง)/g, "shrimp"],
+  [/(ປາ|ปลา)/g, "fish"],
+  [/(ໄຂ່|ไข่)/g, "egg"],
+  [/(ຕຳ|ตำ)/g, "papaya salad"],
+  [/(ໝາກຫຸ່ງ|ຫມາກຫຸ່ງ|มะละกอ)/g, "papaya"],
+  [/(ລາບ|ลาบ)/g, "larb"],
+  [/(ເຝີ|ก๋วยเตี๋ยว|ก้วยเตี๋ยว)/g, "noodle soup"],
+  [/(ນ້ຳ|ນໍ້າ|น้ำ)/g, "drink"],
+  [/(ສົ້ມ|ส้ม)/g, "orange"],
+  [/(ກາເຟ|กาแฟ)/g, "coffee"],
+  [/(ຊາ|ชา)/g, "tea"],
+  [/(ເຢັນ|เย็น)/g, "iced"],
+  [/(ທອດ|ทอด)/g, "fried"],
+  [/(ປີ້ງ|ย่าง|ปิ้ง)/g, "grilled"],
+];
+
+const MENU_WORD_LO = [
+  [/(ເຂົ້າ)/g, "ເຂົ້າ "],
+  [/(ຜັດ)/g, "ຜັດ "],
+  [/(ໄກ່)/g, "ໄກ່ "],
+  [/(ໝູ|ຫມູ)/g, "ໝູ "],
+  [/(ເນື້ອ)/g, "ເນື້ອ "],
+  [/(ກຸ້ງ)/g, "ກຸ້ງ "],
+  [/(ປາ)/g, "ປາ "],
+  [/(ໄຂ່)/g, "ໄຂ່ "],
+  [/(ຕຳ)/g, "ຕຳ "],
+  [/(ໝາກຫຸ່ງ|ຫມາກຫຸ່ງ)/g, "ໝາກ ຫຸ່ງ "],
+  [/(ລາບ)/g, "ລາບ "],
+  [/(ເຝີ)/g, "ເຝີ "],
+  [/(ນ້ຳ|ນໍ້າ)/g, "ນ້ຳ "],
+  [/(ສົ້ມ)/g, "ສົ້ມ "],
+  [/(ກາເຟ)/g, "ກາ ເຟ "],
+  [/(ຊາ)/g, "ຊາ "],
+  [/(ເຢັນ)/g, "ເຢັນ "],
+  [/(ທອດ)/g, "ທອດ "],
+  [/(ປີ້ງ)/g, "ປີ້ງ "],
+];
+
+function hasLaoOrThaiText(value) {
+  return /[\u0E80-\u0EFF\u0E00-\u0E7F]/.test(String(value || ""));
+}
+
+function cleanVoiceText(value) {
+  return String(value || "")
+    .replace(/[_/()\[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function menuFallbackEn(name) {
+  let text = String(name || "");
+
+  for (const [pattern, replacement] of MENU_WORD_EN) {
+    text = text.replace(pattern, ` ${replacement} `);
+  }
+
+  text = cleanVoiceText(text);
+
+  if (!text || hasLaoOrThaiText(text)) {
+    return "menu item";
+  }
+
+  return text;
+}
+
+function menuFallbackLo(name) {
+  let text = String(name || "");
+
+  for (const [pattern, replacement] of MENU_WORD_LO) {
+    text = text.replace(pattern, replacement);
+  }
+
+  return cleanVoiceText(text) || "ເມນູ";
+}
+
+function menuVoiceName(item) {
+  const custom = getCustomMenuVoice(item, "lo");
+  if (custom) return custom;
+
+  const name = getItemName(item);
+  const override = MENU_VOICE_OVERRIDES[normalizeMenuKey(name)];
+  if (override?.lo) return override.lo;
+
+  return menuFallbackLo(name);
+}
+
+function menuVoiceNameEn(item) {
+  const custom = getCustomMenuVoice(item, "en");
+  if (custom) return custom;
+
+  const name = getItemName(item);
+  const override = MENU_VOICE_OVERRIDES[normalizeMenuKey(name)];
+  if (override?.en) return override.en;
+
+  return menuFallbackEn(name);
+}
+
 function itemsVoiceText(items) {
-  return items.map((item) => `${getItemName(item)} ${getItemQty(item)}`).join(", ");
+  return items
+    .map((item) => `${menuVoiceName(item)} ${numberVoice(getItemQty(item))}`)
+    .join(", ");
 }
 
 function itemsVoiceTextEn(items) {
-  const totalQty = items.reduce((sum, item) => sum + getItemQty(item), 0);
-  if (totalQty <= 0) return "";
-  return `${numberVoiceEn(totalQty)} ${totalQty === 1 ? "item" : "items"}`;
+  return items
+    .map((item) => `${numberVoiceEn(getItemQty(item))} ${menuVoiceNameEn(item)}`)
+    .join(", ");
 }
 
 export function isBillCall(payload) {
