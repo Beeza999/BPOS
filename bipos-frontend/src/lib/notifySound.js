@@ -2,10 +2,16 @@ const SOUND_KEY = "bipos_voice_enabled";
 
 let unlocked = false;
 let audioContext = null;
-let voicesReadyPromise = null;
+let speaking = false;
+let pendingSpeechText = null;
 
 function hasWindow() {
   return typeof window !== "undefined";
+}
+
+function getNavigatorValue(key) {
+  if (!hasWindow()) return "";
+  return String(navigator?.[key] || "");
 }
 
 function getAudioContext() {
@@ -21,66 +27,78 @@ function getAudioContext() {
   return audioContext;
 }
 
-function getVoices() {
-  if (!hasWindow() || !window.speechSynthesis) return [];
-  return window.speechSynthesis.getVoices() || [];
-}
+function isIosLikeDevice() {
+  if (!hasWindow()) return false;
 
-function waitForVoices() {
-  if (voicesReadyPromise) return voicesReadyPromise;
+  const ua = getNavigatorValue("userAgent");
+  const platform = getNavigatorValue("platform");
+  const vendor = getNavigatorValue("vendor");
+  const touchPoints = Number(navigator.maxTouchPoints || 0);
 
-  voicesReadyPromise = new Promise((resolve) => {
-    const voices = getVoices();
-
-    if (voices.length > 0) {
-      resolve(voices);
-      return;
-    }
-
-    let done = false;
-
-    function finish() {
-      if (done) return;
-      done = true;
-      resolve(getVoices());
-    }
-
-    if (hasWindow() && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = finish;
-    }
-
-    setTimeout(finish, 1200);
-  });
-
-  return voicesReadyPromise;
+  return Boolean(
+    /iPad|iPhone|iPod/i.test(ua) ||
+      (/Macintosh|Mac OS X/i.test(ua) && touchPoints > 1) ||
+      (platform === "MacIntel" && touchPoints > 1) ||
+      (/Apple/i.test(vendor) && touchPoints > 1 && !/Android/i.test(ua))
+  );
 }
 
 function isMobileLikeDevice() {
   if (!hasWindow()) return false;
 
-  const ua = String(navigator.userAgent || "");
-  const platform = String(navigator.platform || "");
+  const ua = getNavigatorValue("userAgent");
+  const platform = getNavigatorValue("platform");
   const userAgentDataMobile = Boolean(navigator.userAgentData?.mobile);
   const touchPoints = Number(navigator.maxTouchPoints || 0);
+  const isCoarsePointer = Boolean(
+    window.matchMedia && window.matchMedia("(pointer: coarse)").matches
+  );
 
-  return (
+  const isPhoneOrTabletUa =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Silk|Kindle|PlayBook/i.test(ua);
+
+  const isIpadDesktopMode =
+    (/Macintosh|Mac OS X/i.test(ua) || platform === "MacIntel") && touchPoints > 1;
+
+  const screenMax = Math.max(
+    Number(window.screen?.width || 0),
+    Number(window.screen?.height || 0)
+  );
+  const looksLikeTablet = isCoarsePointer && touchPoints > 0 && screenMax > 0 && screenMax <= 1600;
+
+  return Boolean(
     userAgentDataMobile ||
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua) ||
-    (platform === "MacIntel" && touchPoints > 1)
+      isPhoneOrTabletUa ||
+      isIpadDesktopMode ||
+      looksLikeTablet
   );
 }
 
 export function shouldUseEnglishVoice() {
-  return isMobileLikeDevice();
+  // บังคับมือถือ / iPhone / iPad / Android ใช้ข้อความอังกฤษเสมอ
+  return isMobileLikeDevice() || isIosLikeDevice();
+}
+
+function getVoicesNow() {
+  if (!hasWindow() || !window.speechSynthesis) return [];
+
+  try {
+    return window.speechSynthesis.getVoices() || [];
+  } catch {
+    return [];
+  }
 }
 
 function voicePreferences() {
-  if (shouldUseEnglishVoice()) return ["en-US", "en-GB", "en", "lo", "th"];
+  if (shouldUseEnglishVoice()) {
+    return ["en-US", "en-GB", "en-AU", "en-CA", "en-IN", "en"];
+  }
+
   return ["lo-LA", "lo", "th-TH", "th", "en-US", "en"];
 }
 
-async function getBestVoice() {
-  const voices = await waitForVoices();
+function getBestVoiceNow() {
+  const voices = getVoicesNow();
   const preferences = voicePreferences().map((lang) => lang.toLowerCase());
 
   for (const lang of preferences) {
@@ -94,7 +112,12 @@ async function getBestVoice() {
     if (partial) return partial;
   }
 
-  return voices[0] || null;
+  if (shouldUseEnglishVoice()) {
+    const english = voices.find((voice) => String(voice.lang || "").toLowerCase().startsWith("en"));
+    if (english) return english;
+  }
+
+  return null;
 }
 
 function normalizeSpeechText(text) {
@@ -107,59 +130,114 @@ function normalizeSpeechText(text) {
   return String(text || "");
 }
 
-function playIosSafeBeep() {
+function resumeAudioContextNow() {
+  try {
+    const context = getAudioContext();
+    if (context && context.state === "suspended") {
+      context.resume().catch((error) => console.warn("AudioContext resume failed:", error));
+    }
+  } catch (error) {
+    console.warn("AudioContext unlock failed:", error);
+  }
+}
+
+function resumeSpeechNow() {
+  if (!hasWindow() || !window.speechSynthesis) return;
+
+  try {
+    window.speechSynthesis.resume();
+  } catch {
+    // Safari บางเวอร์ชัน throw ได้ ปล่อยผ่าน
+  }
+}
+
+function startIosSpeechKeepAlive(utterance, maxMs = 7000) {
+  if (!isIosLikeDevice() || !hasWindow() || !window.speechSynthesis) return () => {};
+
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    if (Date.now() - startedAt > maxMs) {
+      window.clearInterval(timer);
+      return;
+    }
+    resumeSpeechNow();
+  }, 250);
+
+  const stop = () => window.clearInterval(timer);
+  utterance.addEventListener?.("end", stop);
+  utterance.addEventListener?.("error", stop);
+  return stop;
+}
+
+function speakDirect(text, options = {}) {
+  const speechText = normalizeSpeechText(text).trim();
+
   return new Promise((resolve, reject) => {
+    if (!speechText || !hasWindow() || !window.speechSynthesis) {
+      reject(new Error("Speech synthesis not supported"));
+      return;
+    }
+
     try {
-      const audio = new Audio(
-        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
-      );
+      const useEnglish = shouldUseEnglishVoice();
+      const utterance = new SpeechSynthesisUtterance(speechText);
+      const voice = getBestVoiceNow();
 
-      audio.volume = 1;
-      audio.muted = false;
-      audio.playsInline = true;
-
-      const result = audio.play();
-
-      if (result && result.then) {
-        result.then(() => resolve(true)).catch(reject);
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || (useEnglish ? "en-US" : "lo-LA");
       } else {
-        resolve(true);
+        utterance.lang = useEnglish ? "en-US" : "lo-LA";
       }
+
+      utterance.rate = useEnglish ? 0.9 : 0.86;
+      utterance.pitch = 1;
+      utterance.volume = typeof options.volume === "number" ? options.volume : 1;
+
+      let finished = false;
+      let stopKeepAlive = () => {};
+
+      const done = (ok, error) => {
+        if (finished) return;
+        finished = true;
+        stopKeepAlive();
+        if (ok) resolve(true);
+        else reject(error || new Error("Speak failed"));
+      };
+
+      const timeout = window.setTimeout(() => done(true), options.timeoutMs || 9000);
+
+      utterance.onend = () => {
+        window.clearTimeout(timeout);
+        done(true);
+      };
+
+      utterance.onerror = (event) => {
+        window.clearTimeout(timeout);
+        done(false, new Error(event?.error || "Speak failed"));
+      };
+
+      resumeSpeechNow();
+
+      if (options.cancel !== false) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
+      }
+
+      // iOS สำคัญมาก: speak ต้องถูกเรียกทันทีจาก event แตะปุ่ม ไม่ผ่าน await ก่อน
+      window.speechSynthesis.speak(utterance);
+      resumeSpeechNow();
+      stopKeepAlive = startIosSpeechKeepAlive(utterance, options.timeoutMs || 9000);
     } catch (error) {
       reject(error);
     }
   });
 }
 
-async function unlockAudio() {
-  try {
-    const context = getAudioContext();
-
-    if (context && context.state === "suspended") {
-      await context.resume();
-    }
-
-    if (hasWindow() && window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(" ");
-      utterance.volume = 0.01;
-      utterance.rate = 1;
-      utterance.pitch = 1;
-
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    }
-
-    unlocked = true;
-    localStorage.setItem(SOUND_KEY, "1");
-
-    return true;
-  } catch (error) {
-    console.warn("unlockAudio failed:", error);
-    return false;
-  }
-}
-
-function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.25 } = {}) {
+function playTone({ frequency = 880, duration = 0.16, delay = 0, volume = 0.22 } = {}) {
   return new Promise((resolve, reject) => {
     try {
       const context = getAudioContext();
@@ -168,6 +246,10 @@ function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.25 }
         if (navigator.vibrate) navigator.vibrate(120);
         resolve(true);
         return;
+      }
+
+      if (context.state === "suspended") {
+        context.resume().catch(() => null);
       }
 
       const startAt = context.currentTime + delay;
@@ -185,7 +267,7 @@ function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.25 }
       gain.connect(context.destination);
 
       oscillator.start(startAt);
-      oscillator.stop(startAt + duration + 0.03);
+      oscillator.stop(startAt + duration + 0.04);
 
       oscillator.onended = () => resolve(true);
     } catch (error) {
@@ -195,114 +277,38 @@ function playTone({ frequency = 880, duration = 0.18, delay = 0, volume = 0.25 }
 }
 
 async function playNotifyBell() {
-  await unlockAudio();
-  await playTone({ frequency: 880, duration: 0.16, delay: 0 });
-  await playTone({ frequency: 1175, duration: 0.18, delay: 0.18 });
-  return true;
-}
-
-async function speakText(text) {
-  const speechText = normalizeSpeechText(text);
-
-  if (!speechText || !hasWindow() || !window.speechSynthesis) {
-    throw new Error("Speech synthesis not supported");
-  }
-
   try {
-    const context = getAudioContext();
-    if (context && context.state === "suspended") {
-      await context.resume();
-    }
+    resumeAudioContextNow();
+    await playTone({ frequency: 880, duration: 0.15, delay: 0 });
+    await playTone({ frequency: 1175, duration: 0.17, delay: 0.15 });
+    return true;
   } catch (error) {
-    console.warn("resume before speak failed:", error);
+    console.warn("Bell failed:", error);
+    return false;
   }
-
-  const voice = await getBestVoice();
-
-  return new Promise((resolve, reject) => {
-    try {
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(speechText);
-
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang || (shouldUseEnglishVoice() ? "en-US" : "lo-LA");
-      } else {
-        utterance.lang = shouldUseEnglishVoice() ? "en-US" : "lo-LA";
-      }
-
-      utterance.rate = shouldUseEnglishVoice() ? 0.92 : 0.86;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      let finished = false;
-
-      const fallbackTimer = window.setTimeout(() => {
-        if (finished) return;
-        finished = true;
-        resolve(true);
-      }, 9000);
-
-      utterance.onend = () => {
-        if (finished) return;
-        finished = true;
-        window.clearTimeout(fallbackTimer);
-        resolve(true);
-      };
-
-      utterance.onerror = (event) => {
-        if (finished) return;
-        finished = true;
-        window.clearTimeout(fallbackTimer);
-        reject(new Error(event?.error || "Speak failed"));
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (error) {
-      reject(error);
-    }
-  });
 }
 
 export async function enableNotifySound() {
-  try {
-    unlocked = true;
+  if (!hasWindow()) return false;
 
-    try {
-      await playIosSafeBeep();
-    } catch (error) {
-      console.warn("iOS audio unlock failed:", error);
-    }
+  unlocked = true;
+  localStorage.setItem(SOUND_KEY, "1");
 
-    try {
-      await unlockAudio();
-    } catch (error) {
-      console.warn("WebAudio unlock failed:", error);
-    }
+  // ต้องทำทันทีในจังหวะที่ผู้ใช้แตะปุ่ม โดยเฉพาะ iPhone/iPad
+  resumeAudioContextNow();
+  resumeSpeechNow();
 
-    try {
-      await playNotifyBell();
-    } catch (error) {
-      console.warn("Bell test failed:", error);
-    }
+  speakDirect({
+    lo: "ເປີດສຽງແຈ້ງເຕືອນແລ້ວ",
+    en: "Notification sound enabled",
+  }).catch((error) => console.warn("iOS speech unlock failed:", error));
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
+  // ให้เสียง bell ตามหลังนิดหน่อย ไม่แย่งจังหวะ speech unlock ของ iOS
+  window.setTimeout(() => {
+    playNotifyBell().catch((error) => console.warn("Bell test failed:", error));
+  }, isIosLikeDevice() ? 450 : 80);
 
-    try {
-      await speakText({ lo: "ເປີດສຽງແຈ້ງເຕືອນແລ້ວ", en: "Notification sound enabled" });
-    } catch (error) {
-      console.warn("Voice test failed:", error);
-    }
-
-    localStorage.setItem(SOUND_KEY, "1");
-    return true;
-  } catch (error) {
-    unlocked = false;
-    localStorage.removeItem(SOUND_KEY);
-    console.warn("Audio unlock failed:", error);
-    return false;
-  }
+  return true;
 }
 
 export function isNotifySoundEnabled() {
@@ -313,28 +319,38 @@ export function hasSavedNotifySoundPreference() {
   return hasWindow() && localStorage.getItem(SOUND_KEY) === "1";
 }
 
+async function speakQueued(text) {
+  pendingSpeechText = text;
+
+  if (speaking) return true;
+
+  speaking = true;
+
+  try {
+    while (pendingSpeechText) {
+      const nextText = pendingSpeechText;
+      pendingSpeechText = null;
+
+      await speakDirect(nextText).catch((error) => {
+        console.warn("Voice notification failed:", error);
+        return false;
+      });
+    }
+  } finally {
+    speaking = false;
+  }
+
+  return true;
+}
+
 export async function speakNotify(text) {
   if (!unlocked) return false;
 
-  try {
-    await playIosSafeBeep();
-  } catch (error) {
-    console.warn("iOS beep failed:", error);
-  }
+  // Bell ช่วยให้ iOS มีเสียงแจ้งเตือนแน่นอน แม้ speechSynthesis บางเครื่องจะเงียบ
+  playNotifyBell().catch((error) => console.warn("Bell notification failed:", error));
 
-  try {
-    await playNotifyBell();
-  } catch (error) {
-    console.warn("Bell notification failed:", error);
-  }
-
-  try {
-    await speakText(text);
-    return true;
-  } catch (error) {
-    console.warn("Voice notification failed:", error);
-    return false;
-  }
+  await speakQueued(text);
+  return true;
 }
 
 function getTableName(payload) {
