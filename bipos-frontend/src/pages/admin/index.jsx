@@ -312,8 +312,31 @@ export default function Admin() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function updateUserStatus(id, status) {
+    try {
+      await api("/api/users/" + id, {
+        method: "PUT",
+        body: { status },
+      });
+
+      if (editingUserId === id) resetUserForm();
+      await load();
+    } catch (error) {
+      alert(error.message || "ປ່ຽນສະຖານະຜູ້ໃຊ້ບໍ່ສຳເລັດ");
+    }
+  }
+
+  async function disableUser(id) {
+    if (!confirm("ຢືນຢັນປິດໃຊ້ງານບັນຊີນີ້?")) return;
+    await updateUserStatus(id, "INACTIVE");
+  }
+
+  async function activateUser(id) {
+    await updateUserStatus(id, "ACTIVE");
+  }
+
   async function deleteUser(id) {
-    if (!confirm("ຢືນຢັນລົບຜູ້ໃຊ້?")) return;
+    if (!confirm("ຢືນຢັນລົບຜູ້ໃຊ້ນີ້ອອກຈາກໜ້າ Admin ຖາວອນ?")) return;
 
     try {
       await api("/api/users/" + id, { method: "DELETE" });
@@ -508,6 +531,8 @@ export default function Admin() {
           editingUserId={editingUserId}
           editUser={editUser}
           cancelEditUser={resetUserForm}
+          disableUser={disableUser}
+          activateUser={activateUser}
           deleteUser={deleteUser}
           currentUser={adminAuth.user}
           tables={tables}

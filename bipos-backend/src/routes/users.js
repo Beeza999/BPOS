@@ -39,7 +39,7 @@ async function ensureActiveOwnerRemains(existing, data) {
   if (existing.role !== 'OWNER') return;
 
   const demotingOwner = data.role && data.role !== 'OWNER';
-  const disablingOwner = data.status === 'INACTIVE';
+  const disablingOwner = data.status === 'INACTIVE' || data.status === 'DELETED';
   if (!demotingOwner && !disablingOwner) return;
 
   const otherActiveOwners = await prisma.user.count({
@@ -63,7 +63,7 @@ function normalizeUserBranch(data) {
 
 userRouter.get('/', requireAuth, allowRoles('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
-    const where = { restaurantId: req.user.restaurantId };
+    const where = { restaurantId: req.user.restaurantId, status: { not: 'DELETED' } };
     if (req.query.branchId) {
       await ensureBranchBelongsToUser(req.query.branchId, req.user);
       where.branchId = String(req.query.branchId);
@@ -123,9 +123,9 @@ userRouter.delete('/:id', requireAuth, allowRoles('OWNER', 'ADMIN'), async (req,
     }
 
     assertCanUpdateUser(req.user, existing);
-    await ensureActiveOwnerRemains(existing, { status: 'INACTIVE' });
+    await ensureActiveOwnerRemains(existing, { status: 'DELETED' });
 
-    const user = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'INACTIVE' } });
+    const user = await prisma.user.update({ where: { id: req.params.id }, data: { status: 'DELETED' } });
     await logAudit(req, { action: 'USER_DELETED', targetType: 'User', targetId: user.id, branchId: user.branchId, metadata: { username: user.username, role: user.role } });
     const safe = stripPrivateUser(user);
     emitBranchAndRestaurant(req, { branchId: user.branchId, restaurantId: user.restaurantId }, 'user:changed', { ...safe, deleted: true });

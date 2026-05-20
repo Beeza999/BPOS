@@ -26,12 +26,13 @@ export default function UsersPage({
   editingUserId,
   editUser,
   cancelEditUser,
+  disableUser,
+  activateUser,
   deleteUser,
   currentUser,
   tables = [],
 }) {
   const roles = roleOptions(currentUser);
-
   const branchOptions = Array.from(
     new Map(
       (tables || [])
@@ -44,16 +45,19 @@ export default function UsersPage({
     ).values()
   );
 
-  // ສະແດງສະເພາະຜູ້ໃຊ້ ACTIVE
-  // ຜູ້ໃຊ້ INACTIVE ຈະບໍ່ສະແດງໃນໜ້ານີ້
-  const activeUsers = (users || []).filter((item) => item.status !== "INACTIVE");
+  // ACTIVE ຈະຂຶ້ນໃນກຸ່ມເປີດໃຊ້ງານ
+  // INACTIVE ຈະຂຶ້ນໃນກຸ່ມປິດໃຊ້ງານ ແລະເປີດຄືນໄດ້
+  // DELETED ຈະບໍ່ສະແດງໃນໜ້າ Admin ແຕ່ຍັງຢູ່ໃນ database
+  const visibleUsers = (users || []).filter((item) => item.status !== "DELETED");
+  const activeUsers = visibleUsers.filter((item) => item.status !== "INACTIVE");
+  const inactiveUsers = visibleUsers.filter((item) => item.status === "INACTIVE");
 
   return (
     <section className="p-4">
       <div className="mb-4">
         <h2 className="text-2xl font-bold">ຈັດການຜູ້ໃຊ້</h2>
         <p className="text-sm text-slate-500">
-          ເພີ່ມ, ແກ້ໄຂ, ປ່ຽນ PIN, ກຳນົດສິດ ແລະ ລົບຜູ້ໃຊ້
+          ເພີ່ມ, ແກ້ໄຂ, ປ່ຽນ PIN, ປິດໃຊ້ງານ, ເປີດຄືນ ແລະ ລົບອອກຈາກໜ້າ Admin
         </p>
       </div>
 
@@ -64,9 +68,7 @@ export default function UsersPage({
               {editingUserId ? "ແກ້ໄຂຜູ້ໃຊ້" : "ເພີ່ມຜູ້ໃຊ້"}
             </h3>
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              {editingUserId
-                ? "ຖ້າບໍ່ຕ້ອງການປ່ຽນ PIN ໃຫ້ປ່ອຍຊ່ອງ PIN ວ່າງ"
-                : "ໃສ່ PIN 4-12 ຕົວເລກ"}
+              {editingUserId ? "ຖ້າບໍ່ຕ້ອງການປ່ຽນ PIN ໃຫ້ປ່ອຍຊ່ອງ PIN ວ່າງ" : "ໃສ່ PIN 4-12 ຕົວເລກ"}
             </p>
           </div>
 
@@ -97,9 +99,7 @@ export default function UsersPage({
             onChange={(e) => setUser({ ...user, role: e.target.value })}
           >
             {roles.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
+              <option key={role} value={role}>{role}</option>
             ))}
           </select>
 
@@ -131,74 +131,126 @@ export default function UsersPage({
             <button className="btn bg-orange-500 text-white">
               {editingUserId ? "ບັນທຶກການແກ້ໄຂ" : "ບັນທຶກ"}
             </button>
-
             {editingUserId && (
-              <button
-                type="button"
-                className="btn bg-slate-200 text-slate-700"
-                onClick={cancelEditUser}
-              >
+              <button type="button" className="btn bg-slate-200 text-slate-700" onClick={cancelEditUser}>
                 ຍົກເລີກ
               </button>
             )}
           </div>
         </form>
 
-        <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-4">
-            <h3 className="text-lg font-bold">ຜູ້ໃຊ້</h3>
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold">ຜູ້ໃຊ້ທີ່ເປີດໃຊ້ງານ</h3>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {activeUsers.map((item) => {
+                const editable = canEditUser(currentUser, item);
+                const removable = canDeleteUser(currentUser, item);
+
+                return (
+                  <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" key={item.id}>
+                    <div>
+                      <p className="text-lg font-bold">{item.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {item.username} · {item.role} · {item.status || "ACTIVE"}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!editable}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        onClick={() => editUser(item)}
+                      >
+                        ແກ້ໄຂ
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!removable}
+                        className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        onClick={() => disableUser(item.id)}
+                      >
+                        ປິດໃຊ້ງານ
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!removable}
+                        className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        onClick={() => deleteUser(item.id)}
+                      >
+                        ລົບ
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!activeUsers.length && (
+                <div className="p-8 text-center text-slate-500">ຍັງບໍ່ມີຜູ້ໃຊ້</div>
+              )}
+            </div>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {activeUsers.map((item) => {
-              const editable = canEditUser(currentUser, item);
-              const deletable = canDeleteUser(currentUser, item);
-
-              return (
-                <div
-                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  key={item.id}
-                >
-                  <div>
-                    <p className="text-lg font-bold">{item.name}</p>
-                    <p className="text-sm text-slate-500">
-                      {item.username} · {item.role} · {item.status || "ACTIVE"}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={!editable}
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                      onClick={() => editUser(item)}
-                    >
-                      ແກ້ໄຂ
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={!deletable}
-                      className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                      onClick={() => {
-                        if (window.confirm(`ຕ້ອງການລົບ ${item.name} ບໍ?`)) {
-                          deleteUser(item.id);
-                        }
-                      }}
-                    >
-                      ລົບ
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {!activeUsers.length && (
-              <div className="p-8 text-center text-slate-500">
-                ຍັງບໍ່ມີຜູ້ໃຊ້
+          {inactiveUsers.length > 0 && (
+            <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+              <div className="border-b border-slate-100 p-4">
+                <h3 className="text-lg font-bold">ຜູ້ໃຊ້ທີ່ປິດໃຊ້ງານ</h3>
               </div>
-            )}
-          </div>
+
+              <div className="divide-y divide-slate-100">
+                {inactiveUsers.map((item) => {
+                  const editable = canEditUser(currentUser, item);
+                  const removable = canDeleteUser(currentUser, item);
+
+                  return (
+                    <div className="flex flex-col gap-3 p-4 opacity-80 sm:flex-row sm:items-center sm:justify-between" key={item.id}>
+                      <div>
+                        <p className="text-lg font-bold">{item.name}</p>
+                        <p className="text-sm text-slate-500">
+                          {item.username} · {item.role} · INACTIVE
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={!editable}
+                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          onClick={() => editUser(item)}
+                        >
+                          ແກ້ໄຂ
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!editable}
+                          className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          onClick={() => activateUser(item.id)}
+                        >
+                          ເປີດໃຊ້ງານ
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!removable}
+                          className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          onClick={() => deleteUser(item.id)}
+                        >
+                          ລົບ
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -18,6 +18,7 @@ enum UserRole {
 enum EntityStatus {
   ACTIVE
   INACTIVE
+  DELETED
 }
 
 enum TableStatus {
