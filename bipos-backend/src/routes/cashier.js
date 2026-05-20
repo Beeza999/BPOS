@@ -36,6 +36,11 @@ function buildBillStatus(bill) {
 
   return {
     ...bill,
+
+    // ถ้า Kitchen กด READY ครบทุกเมนู = รอจ่าย
+    // ถ้ายังไม่ครบ = กำลังใช้งาน
+    status: canPay ? 'BILLING' : 'OPEN',
+
     totalItems,
     readyItems,
     canPay,
